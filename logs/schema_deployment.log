@@ -1,0 +1,32 @@
+2025-07-08 08:42:33,205 - INFO - ============================================================
+2025-07-08 08:42:33,205 - INFO - 🏗️  Supabase Schema Deployment
+2025-07-08 08:42:33,206 - INFO - ============================================================
+2025-07-08 08:42:33,206 - INFO - Testing database connection...
+2025-07-08 08:42:33,641 - INFO - ✅ Connected to PostgreSQL: PostgreSQL 17.4 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit
+2025-07-08 08:42:33,681 - INFO - ✅ Connected to database: postgres
+2025-07-08 08:42:33,688 - INFO - ✅ Schema file validated: sql/schema.sql
+2025-07-08 08:42:33,689 - INFO - ✅ Schema size: 21786 characters
+2025-07-08 08:42:34,004 - INFO - 📋 Existing tables found:
+2025-07-08 08:42:34,005 - INFO -   ❌ players
+2025-07-08 08:42:34,007 - INFO -   ❌ teams
+2025-07-08 08:42:34,008 - INFO -   ❌ qb_basic_stats
+2025-07-08 08:42:34,009 - INFO -   ❌ qb_advanced_stats
+2025-07-08 08:42:34,010 - INFO -   ❌ qb_splits
+2025-07-08 08:42:34,013 - INFO -   ❌ qb_game_log
+2025-07-08 08:42:34,013 - INFO -   ❌ scraping_log
+2025-07-08 08:42:34,015 - INFO - 🚀 Starting schema deployment...
+2025-07-08 08:42:34,298 - INFO - 📝 Executing schema...
+2025-07-08 08:42:34,467 - INFO - ✅ Schema executed successfully
+2025-07-08 08:42:34,511 - INFO - ✅ Created tables: players, qb_advanced_stats, qb_basic_stats, qb_game_log, qb_splits, scraping_log, teams
+2025-07-08 08:42:34,552 - INFO - ✅ Created 41 indexes
+2025-07-08 08:42:34,596 - INFO - ✅ Created 6 views: database_stats, qb_home_away_splits, qb_quarter_performance, qb_red_zone_performance, qb_season_summary, qb_vs_winning_teams
+2025-07-08 08:42:34,637 - INFO - ✅ Created 3 functions: get_qb_splits_by_type, get_qb_stats_by_season, update_updated_at_column
+2025-07-08 08:42:34,639 - INFO - 🎉 Schema deployment completed successfully!
+2025-07-08 08:42:34,640 - INFO - 🔍 Verifying deployment...
+2025-07-08 08:42:35,091 - INFO - 📊 Deployment Verification Results:
+2025-07-08 08:42:35,091 - INFO -   ✅ Tables Created
+2025-07-08 08:42:35,092 - INFO -   ✅ Indexes Created
+2025-07-08 08:42:35,092 - INFO -   ✅ Views Created
+2025-07-08 08:42:35,093 - INFO -   ✅ Functions Created
+2025-07-08 08:42:35,093 - INFO -   ✅ Rls Enabled
+2025-07-08 08:42:35,093 - INFO - 🎉 All verification checks passed!

@@ -1,0 +1,4 @@
+2025-07-08 08:33:32,778 - __main__ - INFO - Starting scrape for Joe Burrow (2024 season)
+2025-07-08 08:33:32,778 - __main__ - INFO - Finding player URL...
+2025-07-08 08:33:32,941 - __main__ - WARNING - Could not find URL for Joe Burrow. You may need to provide the PFR URL manually.
+2025-07-08 08:33:32,945 - __main__ - ERROR - Could not find PFR URL for Joe Burrow

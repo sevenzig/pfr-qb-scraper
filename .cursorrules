@@ -1,0 +1,377 @@
+# Cursor AI IDE Rules for NFL QB Data Scraping Project
+
+## Project Overview
+This project scrapes NFL quarterback data from Pro Football Reference and stores it in a PostgreSQL database using Supabase. The system includes Python scrapers, SQL schemas, and TypeScript/Drizzle ORM for data access.
+
+## General Development Guidelines
+
+### Code Quality Standards
+- Write clean, readable, and maintainable code
+- Follow language-specific best practices and conventions
+- Prioritize error handling and data validation
+- Include comprehensive logging and monitoring
+- Write self-documenting code with clear variable names
+- Add docstrings and comments for complex logic
+
+### Documentation Requirements
+- Every function must have a docstring explaining purpose, parameters, and return values
+- Include type hints for all Python functions
+- Document complex algorithms and business logic
+- Add inline comments for non-obvious code sections
+- Maintain up-to-date README files
+
+## Python-Specific Rules
+
+### Code Style & Structure
+- Follow PEP 8 style guidelines strictly
+- Use type hints for all function parameters and return values
+- Prefer dataclasses over dictionaries for structured data
+- Use f-strings for string formatting
+- Keep functions focused and under 50 lines when possible
+- Use descriptive variable names (avoid abbreviations)
+
+### Error Handling
+- Always use try-except blocks for external API calls
+- Implement proper retry logic with exponential backoff
+- Log errors with appropriate context and stack traces
+- Use custom exceptions for domain-specific errors
+- Never use bare `except:` clauses
+- Handle rate limiting gracefully
+
+### Data Processing
+- Validate all scraped data before database insertion
+- Use pandas for data manipulation when appropriate
+- Implement data cleaning functions with clear names
+- Handle missing/null values explicitly
+- Use safe type conversion functions (safe_int, safe_float)
+- Validate data ranges and constraints
+
+### Database Operations
+- Use parameterized queries to prevent SQL injection
+- Implement proper connection pooling and cleanup
+- Use transactions for multi-step operations
+- Include conflict resolution for upsert operations
+- Log database operations with timing information
+- Handle database connection failures gracefully
+
+### Web Scraping Best Practices
+- Respect robots.txt and rate limits
+- Use appropriate User-Agent headers
+- Implement proper request timeouts
+- Handle HTTP errors and retries
+- Cache responses when appropriate
+- Monitor and log request statistics
+
+## SQL-Specific Rules
+
+### Schema Design
+- Use appropriate data types (DECIMAL for money, TIMESTAMP for dates)
+- Include proper constraints (CHECK, UNIQUE, FOREIGN KEY)
+- Add meaningful indexes for query performance
+- Use descriptive table and column names
+- Include comments on tables and complex columns
+- Design for both OLTP and OLAP workloads
+
+### Query Optimization
+- Use appropriate indexes for common query patterns
+- Avoid SELECT * in production code
+- Use LIMIT for potentially large result sets
+- Prefer JOINs over subqueries when possible
+- Use EXPLAIN to analyze query performance
+- Include proper WHERE clause ordering
+
+### Data Integrity
+- Use transactions for multi-table operations
+- Implement proper foreign key relationships
+- Add check constraints for data validation
+- Use NOT NULL where appropriate
+- Design for data consistency and referential integrity
+
+## TypeScript/Drizzle ORM Rules
+
+### Type Safety
+- Use strict TypeScript configuration
+- Define interfaces for all data structures
+- Use union types for constrained values
+- Avoid `any` type - use `unknown` if necessary
+- Implement proper null/undefined handling
+- Use type guards for runtime type checking
+
+### Database Schema
+- Define schema types that match database structure
+- Use proper relationship definitions
+- Include all necessary indexes in schema
+- Use enums for constrained values
+- Implement proper conflict resolution
+- Add validation schemas for input data
+
+### Query Building
+- Use type-safe query builders
+- Implement proper error handling for database operations
+- Use prepared statements for dynamic queries
+- Include proper transaction handling
+- Log database queries in development
+- Implement query result validation
+
+## Specific Code Patterns
+
+### Data Validation
+```python
+def validate_qb_stats(stats: QBStats) -> List[str]:
+    """
+    Validate QB statistics for data integrity.
+    
+    Args:
+        stats: QB statistics to validate
+        
+    Returns:
+        List of validation error messages
+    """
+    errors = []
+    
+    if stats.completions > stats.attempts:
+        errors.append("Completions cannot exceed attempts")
+    
+    if stats.rating < 0 or stats.rating > 158.3:
+        errors.append("Invalid passer rating range")
+    
+    return errors
+```
+
+### Error Handling
+```python
+def make_request_with_retry(url: str, max_retries: int = 3) -> Optional[Response]:
+    """
+    Make HTTP request with exponential backoff retry logic.
+    
+    Args:
+        url: URL to request
+        max_retries: Maximum number of retry attempts
+        
+    Returns:
+        Response object or None if all retries failed
+    """
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            return response
+        except requests.exceptions.RequestException as e:
+            if attempt == max_retries - 1:
+                logger.error(f"All retries failed for {url}: {e}")
+                return None
+            wait_time = 2 ** attempt
+            time.sleep(wait_time)
+    
+    return None
+```
+
+### Database Operations
+```python
+def bulk_insert_with_conflict_resolution(
+    table_name: str, 
+    data: List[Dict[str, Any]], 
+    conflict_columns: List[str]
+) -> None:
+    """
+    Perform bulk insert with conflict resolution.
+    
+    Args:
+        table_name: Target table name
+        data: List of dictionaries to insert
+        conflict_columns: Columns to use for conflict resolution
+    """
+    if not data:
+        return
+    
+    try:
+        # Implementation here
+        pass
+    except Exception as e:
+        logger.error(f"Bulk insert failed for {table_name}: {e}")
+        raise
+```
+
+## File Organization
+
+### Directory Structure
+```
+nfl-qb-scraper/
+├── src/
+│   ├── scrapers/          # Web scraping modules
+│   ├── database/          # Database operations
+│   ├── models/            # Data models and schemas
+│   ├── utils/             # Utility functions
+│   └── config/            # Configuration files
+├── sql/                   # SQL schemas and migrations
+├── tests/                 # Test files
+├── docs/                  # Documentation
+└── scripts/               # Utility scripts
+```
+
+### Naming Conventions
+- Files: snake_case (e.g., `qb_stats_scraper.py`)
+- Classes: PascalCase (e.g., `QBStatsScraper`)
+- Functions: snake_case (e.g., `get_qb_stats`)
+- Constants: UPPER_SNAKE_CASE (e.g., `MAX_RETRIES`)
+- Database tables: snake_case (e.g., `qb_stats`)
+- Database columns: snake_case (e.g., `player_name`)
+
+## Performance Considerations
+
+### Python Performance
+- Use generators for large datasets
+- Implement proper connection pooling
+- Use bulk operations for database insertions
+- Profile code for performance bottlenecks
+- Use appropriate data structures (sets for lookups, lists for ordering)
+- Implement caching for frequently accessed data
+
+### Database Performance
+- Use appropriate indexes for query patterns
+- Implement proper query optimization
+- Use connection pooling
+- Monitor query execution times
+- Use bulk operations when possible
+- Implement proper transaction boundaries
+
+### Memory Management
+- Clean up resources properly (close connections, files)
+- Use context managers for resource management
+- Avoid loading entire datasets into memory
+- Use streaming for large data processing
+- Monitor memory usage in production
+
+## Testing Guidelines
+
+### Unit Tests
+- Test all public methods and functions
+- Use meaningful test names that describe the scenario
+- Test both success and failure cases
+- Mock external dependencies (APIs, databases)
+- Use parameterized tests for multiple scenarios
+- Maintain high test coverage (>80%)
+
+### Integration Tests
+- Test database operations with actual database
+- Test web scraping with mock responses
+- Test end-to-end data flow
+- Use test fixtures for consistent data
+- Test error scenarios and edge cases
+
+### Test Data
+- Use realistic but anonymized test data
+- Create test fixtures for common scenarios
+- Implement data factories for test object creation
+- Use separate test databases
+- Clean up test data after each test
+
+## Security Considerations
+
+### Data Protection
+- Never log sensitive data (passwords, API keys)
+- Use environment variables for configuration
+- Implement proper input validation
+- Use parameterized queries to prevent SQL injection
+- Validate and sanitize all external data
+
+### API Security
+- Use proper authentication for database connections
+- Implement rate limiting for API calls
+- Use HTTPS for all external communications
+- Validate SSL certificates
+- Monitor for suspicious activity
+
+## Monitoring and Logging
+
+### Logging Standards
+- Use structured logging with consistent format
+- Include context information (user, session, request ID)
+- Log at appropriate levels (DEBUG, INFO, WARNING, ERROR)
+- Include timing information for operations
+- Log errors with full stack traces
+- Use correlation IDs for tracking requests
+
+### Monitoring
+- Track key metrics (requests per second, error rates)
+- Monitor database performance and connection usage
+- Set up alerts for critical failures
+- Track data quality metrics
+- Monitor resource usage (CPU, memory, disk)
+
+## Code Review Guidelines
+
+### Review Checklist
+- [ ] Code follows project style guidelines
+- [ ] All functions have proper docstrings
+- [ ] Error handling is comprehensive
+- [ ] Tests are included and passing
+- [ ] Performance considerations are addressed
+- [ ] Security best practices are followed
+- [ ] Database operations are optimized
+- [ ] Logging is appropriate and helpful
+
+### Common Issues to Watch For
+- Missing error handling for external API calls
+- Improper rate limiting implementation
+- SQL injection vulnerabilities
+- Missing data validation
+- Inefficient database queries
+- Memory leaks in long-running processes
+- Missing logging for debugging
+- Hardcoded configuration values
+
+## Development Workflow
+
+### Git Workflow
+- Use meaningful commit messages
+- Keep commits focused and atomic
+- Use branch names that describe the feature/fix
+- Include issue numbers in commit messages
+- Review code before merging
+- Use semantic versioning for releases
+
+### Code Quality Tools
+- Use pylint/flake8 for Python linting
+- Use black for code formatting
+- Use mypy for type checking
+- Use pytest for testing
+- Use pre-commit hooks for automated checks
+- Use coverage tools to track test coverage
+
+## Environment-Specific Rules
+
+### Development Environment
+- Use debug logging levels
+- Include additional validation checks
+- Use local databases for testing
+- Mock external API calls
+- Include timing information in logs
+
+### Production Environment
+- Use appropriate logging levels (INFO and above)
+- Implement proper monitoring and alerting
+- Use connection pooling for databases
+- Include health check endpoints
+- Implement graceful shutdown procedures
+- Use proper error reporting
+
+## Performance Optimization
+
+### Database Optimization
+- Use appropriate indexes for query patterns
+- Implement query result caching
+- Use database connection pooling
+- Monitor slow queries and optimize
+- Use bulk operations for large datasets
+- Implement proper transaction boundaries
+
+### Application Optimization
+- Use appropriate data structures
+- Implement caching for frequently accessed data
+- Use generators for large datasets
+- Profile code for performance bottlenecks
+- Optimize I/O operations
+- Use asynchronous processing when appropriate
+
+Remember: These rules should be enforced through code reviews, automated linting, and continuous integration checks. The goal is to maintain high code quality while ensuring the system is robust, maintainable, and performant.
