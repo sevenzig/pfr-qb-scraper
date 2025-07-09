@@ -1,0 +1,401 @@
+# CLI-Specific Development Rules
+*Standards for building intuitive, user-friendly command-line interfaces*
+
+## Command Structure Standards
+
+### Command Naming Conventions
+- **Use clear, action-based verbs** for primary commands (`scrape`, `setup`, `data`)
+- **Use noun-based names** for subcommands (`players`, `teams`, `stats`)
+- **Keep commands short** but descriptive (prefer `scrape` over `scrape-data`)
+- **Use consistent terminology** across all commands
+- **Avoid abbreviations** unless they're universally understood
+
+### Command Hierarchy
+```bash
+# ✅ GOOD - Clear hierarchy
+pfr-scraper scrape players --names "Joe Burrow" --season 2024
+pfr-scraper scrape season --year 2024 --position QB
+pfr-scraper data validate --season 2024
+pfr-scraper setup database --create-tables
+
+# ❌ BAD - Inconsistent structure
+pfr-scraper joe-burrow-2024
+pfr-scraper scrape-all-qbs
+pfr-scraper db-setup
+```
+
+## Help System Requirements
+
+### Help Text Standards
+- **ALL commands** must have comprehensive help text
+- **Include examples** for complex operations
+- **Show required vs optional** parameters clearly
+- **Group related options** logically
+- **Use consistent formatting** across all help text
+
+### Help Text Example
+```python
+# ✅ GOOD - Comprehensive help text
+class ScrapePlayersCommand:
+    """Scrape statistics for specific NFL quarterbacks."""
+    
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--names',
+            required=True,
+            help='Comma-separated list of player names (e.g., "Joe Burrow,Patrick Mahomes")'
+        )
+        parser.add_argument(
+            '--season',
+            type=int,
+            required=True,
+            help='NFL season year (e.g., 2024)'
+        )
+        parser.add_argument(
+            '--include-splits',
+            action='store_true',
+            help='Include situational splits data (home/away, by opponent, etc.)'
+        )
+        parser.add_argument(
+            '--output-format',
+            choices=['json', 'csv', 'table'],
+            default='table',
+            help='Output format for results (default: table)'
+        )
+    
+    def get_examples(self):
+        return [
+            'Scrape single player: pfr-scraper scrape players --names "Joe Burrow" --season 2024',
+            'Scrape multiple players: pfr-scraper scrape players --names "Joe Burrow,Patrick Mahomes" --season 2024',
+            'Include splits data: pfr-scraper scrape players --names "Joe Burrow" --season 2024 --include-splits',
+            'Export to CSV: pfr-scraper scrape players --names "Joe Burrow" --season 2024 --output-format csv'
+        ]
+```
+
+## Error Message Standards
+
+### User-Friendly Error Messages
+- **Use plain language** - avoid technical jargon
+- **Provide actionable guidance** - tell users how to fix the issue
+- **Include context** - what operation was being performed
+- **Suggest alternatives** when possible
+- **Never expose internal errors** to end users
+
+### Error Message Examples
+```python
+# ✅ GOOD - User-friendly error messages
+class UserFriendlyErrors:
+    @staticmethod
+    def player_not_found(player_name: str) -> str:
+        return (
+            f"Player '{player_name}' not found. "
+            f"Please check the spelling or try searching with a different name format. "
+            f"Example: 'Joe Burrow' or 'J.Burrow'"
+        )
+    
+    @staticmethod
+    def invalid_season(season: int) -> str:
+        current_year = datetime.now().year
+        return (
+            f"Season {season} is not valid. "
+            f"Please use a year between 1950 and {current_year}. "
+            f"Example: --season {current_year}"
+        )
+    
+    @staticmethod
+    def network_error() -> str:
+        return (
+            "Unable to connect to Pro Football Reference. "
+            "Please check your internet connection and try again. "
+            "If the problem persists, the website may be temporarily unavailable."
+        )
+
+# ❌ BAD - Technical error messages
+def bad_error_handling():
+    raise ValueError("Invalid input parameter in function scrape_player_stats()")
+    # No context, no guidance, technical language
+```
+
+## Progress Indication Requirements
+
+### Long-Running Operations
+- **ALL operations > 30 seconds** must show progress
+- **Use progress bars** for operations with known duration
+- **Show current item** being processed
+- **Display estimated time remaining** when possible
+- **Allow graceful cancellation** with Ctrl+C
+
+### Progress Display Examples
+```python
+# ✅ GOOD - Progress indication
+from tqdm import tqdm
+import signal
+
+class ProgressTracker:
+    def __init__(self):
+        self.cancelled = False
+        signal.signal(signal.SIGINT, self.handle_cancel)
+    
+    def handle_cancel(self, signum, frame):
+        self.cancelled = True
+        print("\nOperation cancelled by user. Cleaning up...")
+    
+    def scrape_multiple_players(self, player_names: List[str], season: int):
+        """Scrape multiple players with progress tracking."""
+        results = []
+        
+        with tqdm(total=len(player_names), desc="Scraping players") as pbar:
+            for player_name in player_names:
+                if self.cancelled:
+                    break
+                
+                pbar.set_description(f"Scraping {player_name}")
+                try:
+                    stats = self.scrape_player(player_name, season)
+                    results.append(stats)
+                    pbar.set_postfix({"Success": len(results)})
+                except Exception as e:
+                    pbar.set_postfix({"Errors": pbar.n - len(results) + 1})
+                
+                pbar.update(1)
+        
+        return results
+
+# ❌ BAD - No progress indication
+def scrape_multiple_players(player_names, season):
+    # Long operation with no feedback to user
+    results = []
+    for name in player_names:  # Could take 10+ minutes
+        stats = scrape_player(name, season)
+        results.append(stats)
+    return results
+```
+
+## Configuration and Settings
+
+### CLI Configuration Standards
+- **Support configuration files** (.pfr-scraper.yaml, pfr-scraper.toml)
+- **Allow environment variable overrides** (PFR_RATE_LIMIT, PFR_DB_URL)
+- **Provide command-line option overrides** (highest precedence)
+- **Show current configuration** with `--show-config` option
+- **Validate configuration** on startup
+
+### Configuration Hierarchy
+```python
+# ✅ GOOD - Configuration precedence
+class ConfigurationManager:
+    """Manage configuration with proper precedence."""
+    
+    def load_config(self, cli_args: Dict) -> Config:
+        # 1. Default values (lowest precedence)
+        config = self.get_default_config()
+        
+        # 2. Configuration file values
+        config.update(self.load_config_file())
+        
+        # 3. Environment variables
+        config.update(self.load_env_vars())
+        
+        # 4. Command-line arguments (highest precedence)
+        config.update(cli_args)
+        
+        # Validate final configuration
+        self.validate_config(config)
+        
+        return config
+    
+    def get_config_sources(self) -> Dict[str, str]:
+        """Show where each config value came from."""
+        return {
+            'rate_limit': 'config file',
+            'database_url': 'environment variable',
+            'season': 'command line',
+            'output_format': 'default'
+        }
+```
+
+## Output Formatting Standards
+
+### Consistent Output Formats
+- **Support multiple output formats** (table, json, csv)
+- **Use consistent column names** across different commands
+- **Format numbers appropriately** (2 decimal places for percentages)
+- **Handle missing data gracefully** (show "N/A" not empty cells)
+- **Provide machine-readable options** for scripting
+
+### Output Format Examples
+```python
+# ✅ GOOD - Consistent output formatting
+class OutputFormatter:
+    def format_player_stats(self, stats: PlayerStats, format_type: str) -> str:
+        if format_type == 'table':
+            return self.format_table(stats)
+        elif format_type == 'json':
+            return self.format_json(stats)
+        elif format_type == 'csv':
+            return self.format_csv(stats)
+    
+    def format_table(self, stats: PlayerStats) -> str:
+        """Format as human-readable table."""
+        return f"""
+Player Statistics - {stats.season}
+{'='*40}
+Name:           {stats.player_name}
+Team:           {stats.team}
+Completions:    {stats.completions:,}
+Attempts:       {stats.attempts:,}
+Completion %:   {stats.completion_pct:.1f}%
+Pass Yards:     {stats.pass_yards:,}
+Rating:         {stats.rating:.1f}
+"""
+    
+    def format_json(self, stats: PlayerStats) -> str:
+        """Format as machine-readable JSON."""
+        return json.dumps(stats.to_dict(), indent=2)
+    
+    def format_csv(self, stats: PlayerStats) -> str:
+        """Format as CSV for spreadsheets."""
+        # Implementation with proper CSV escaping
+        pass
+```
+
+## User Experience Guidelines
+
+### Command Discoverability
+- **Implement tab completion** for commands and options
+- **Provide command suggestions** for typos
+- **Show available subcommands** when parent command is run alone
+- **Use consistent option names** (--season not --year in some places and --season in others)
+
+### Migration User Experience
+- **Provide migration guides** from old scripts to new commands
+- **Show deprecation warnings** for old scripts (Phase 4)
+- **Offer script conversion** utilities when possible
+- **Maintain familiar workflows** where possible
+
+### Examples of Good UX
+```python
+# ✅ GOOD - Helpful command discovery
+class CLIHelper:
+    def suggest_commands(self, invalid_command: str) -> List[str]:
+        """Suggest similar commands for typos."""
+        available_commands = ['scrape', 'setup', 'data', 'validate']
+        
+        # Use fuzzy matching to suggest corrections
+        suggestions = []
+        for cmd in available_commands:
+            if self.similarity(invalid_command, cmd) > 0.6:
+                suggestions.append(cmd)
+        
+        return suggestions
+    
+    def show_subcommands(self, parent_command: str):
+        """Show available subcommands when parent is run alone."""
+        subcommands = self.get_subcommands(parent_command)
+        
+        print(f"Available {parent_command} commands:")
+        for subcmd, description in subcommands.items():
+            print(f"  {subcmd:<15} {description}")
+        
+        print(f"\nUse '{parent_command} <command> --help' for more information")
+
+# ❌ BAD - Cryptic error with no guidance
+def handle_invalid_command(cmd):
+    print(f"Error: {cmd} is not a valid command")
+    # No suggestions, no help
+```
+
+## Command Validation
+
+### Input Validation Standards
+- **Validate all inputs** before processing
+- **Provide specific error messages** for each validation failure
+- **Check dependencies** (database connectivity, network access)
+- **Validate configuration** on startup
+- **Fail fast** with clear error messages
+
+### Validation Examples
+```python
+# ✅ GOOD - Comprehensive input validation
+class InputValidator:
+    def validate_scrape_command(self, args) -> List[str]:
+        """Validate scrape command arguments."""
+        errors = []
+        
+        # Validate player names
+        if not args.names:
+            errors.append("Player names are required (use --names)")
+        elif not self.validate_player_names(args.names):
+            errors.append("Invalid player name format. Use 'First Last' format")
+        
+        # Validate season
+        if not args.season:
+            errors.append("Season is required (use --season)")
+        elif not self.validate_season(args.season):
+            errors.append(f"Season must be between 1950 and {datetime.now().year}")
+        
+        # Check database connectivity
+        if not self.check_database_connection():
+            errors.append("Cannot connect to database. Check your configuration")
+        
+        # Check network connectivity
+        if not self.check_network_connection():
+            errors.append("Cannot connect to Pro Football Reference. Check your internet connection")
+        
+        return errors
+    
+    def validate_and_exit_on_error(self, args):
+        """Validate inputs and exit with helpful message if invalid."""
+        errors = self.validate_scrape_command(args)
+        
+        if errors:
+            print("Command validation failed:")
+            for error in errors:
+                print(f"  ❌ {error}")
+            
+            print(f"\nUse 'pfr-scraper scrape players --help' for usage information")
+            sys.exit(1)
+```
+
+## Backwards Compatibility for CLI
+
+### Migration from Old Scripts
+- **Provide mapping documentation** (old script → new command)
+- **Create wrapper scripts** that call new CLI with old parameters
+- **Show deprecation warnings** with migration instructions
+- **Maintain familiar argument names** where possible
+
+### Migration Support Example
+```python
+# ✅ GOOD - Migration support
+class LegacyCommandWrapper:
+    """Wrapper to help users migrate from old scripts."""
+    
+    def handle_legacy_script(self, script_name: str, args: List[str]):
+        """Handle calls to legacy scripts with migration guidance."""
+        
+        mapping = {
+            'enhanced_qb_scraper.py': 'scrape players',
+            'populate_teams.py': 'setup teams',
+            'clear_qb_data.py': 'data clear'
+        }
+        
+        if script_name in mapping:
+            new_command = mapping[script_name]
+            
+            print(f"⚠️  {script_name} is deprecated.")
+            print(f"   Use: pfr-scraper {new_command}")
+            print(f"   Migration guide: docs/migration-from-{script_name.replace('.py', '')}.md")
+            
+            # Actually run the new command
+            self.run_new_command(new_command, args)
+        else:
+            print(f"❌ {script_name} is no longer supported")
+            print("   See docs/migration-guide.md for alternatives")
+```
+
+This CLI-specific rules file addresses the gaps I identified in the original rule set, ensuring that the CLI interface will be intuitive, user-friendly, and properly support the migration process.
+description:
+globs:
+alwaysApply: false
+---

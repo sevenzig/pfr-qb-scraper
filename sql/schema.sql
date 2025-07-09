@@ -1,13 +1,9 @@
 -- NFL QB Data Database Schema for Supabase
--- Optimized for analytics and fast queries with PFR unique IDs as primary keys
+-- Raw Data Tables matching Pro Football Reference CSV exports exactly
+-- NO CALCULATIONS - Raw data only
 
 -- Enable Row Level Security (RLS) for Supabase
 ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
-
--- Create custom types for better data integrity
-CREATE TYPE game_result AS ENUM ('win', 'loss', 'tie');
-CREATE TYPE weather_condition AS ENUM ('clear', 'rain', 'snow', 'wind', 'dome');
-CREATE TYPE field_surface AS ENUM ('grass', 'turf', 'artificial');
 
 -- Player Master Table (for normalization and player info)
 -- Uses PFR unique ID as primary key (e.g., 'burrjo01' for Joe Burrow)
@@ -20,7 +16,7 @@ CREATE TABLE IF NOT EXISTS players (
     height_inches INTEGER,
     weight_lbs INTEGER,
     birth_date DATE,
-    age INTEGER,  -- Calculated age
+    age INTEGER,
     college VARCHAR(100),
     draft_year INTEGER,
     draft_round INTEGER,
@@ -50,143 +46,153 @@ CREATE TABLE IF NOT EXISTS teams (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Basic QB Statistics Table (season totals)
--- Uses composite primary key: (pfr_id, season)
-CREATE TABLE IF NOT EXISTS qb_basic_stats (
+-- QB Passing Statistics Table (matches 2024_passing.csv exactly)
+-- Raw data from main passing stats table with ALL columns
+CREATE TABLE IF NOT EXISTS qb_passing_stats (
     pfr_id VARCHAR(20) NOT NULL,
+    player_name VARCHAR(100) NOT NULL,
+    player_url VARCHAR(255) NOT NULL,
     season INTEGER NOT NULL CHECK (season >= 1920 AND season <= 2030),
-    team VARCHAR(3) NOT NULL,
-    games_played INTEGER DEFAULT 0 CHECK (games_played >= 0),
-    games_started INTEGER DEFAULT 0 CHECK (games_started >= 0),
-    completions INTEGER DEFAULT 0 CHECK (completions >= 0),
-    attempts INTEGER DEFAULT 0 CHECK (attempts >= 0),
-    completion_pct DECIMAL(5,2) CHECK (completion_pct >= 0 AND completion_pct <= 100),
-    pass_yards INTEGER DEFAULT 0,
-    pass_tds INTEGER DEFAULT 0 CHECK (pass_tds >= 0),
-    interceptions INTEGER DEFAULT 0 CHECK (interceptions >= 0),
-    longest_pass INTEGER DEFAULT 0 CHECK (longest_pass >= 0),
-    rating DECIMAL(5,2) CHECK (rating >= 0 AND rating <= 158.3),
-    sacks INTEGER DEFAULT 0 CHECK (sacks >= 0),
-    sack_yards INTEGER DEFAULT 0,
-    net_yards_per_attempt DECIMAL(4,2),
+    
+    -- Raw CSV columns (matching 2024_passing.csv exactly)
+    rk INTEGER,  -- Rank
+    age INTEGER,  -- Age
+    team VARCHAR(3),  -- Team
+    pos VARCHAR(5),  -- Position
+    g INTEGER,  -- Games
+    gs INTEGER,  -- Games Started
+    qb_rec VARCHAR(20),  -- QB Record (W-L-T format)
+    cmp INTEGER,  -- Completions
+    att INTEGER,  -- Attempts
+    cmp_pct DECIMAL(5,2),  -- Completion %
+    yds INTEGER,  -- Yards
+    td INTEGER,  -- Touchdowns
+    td_pct DECIMAL(5,2),  -- TD %
+    int INTEGER,  -- Interceptions
+    int_pct DECIMAL(5,2),  -- Int %
+    first_downs INTEGER,  -- 1D (First Downs)
+    succ_pct DECIMAL(5,2),  -- Success %
+    lng INTEGER,  -- Longest pass
+    y_a DECIMAL(5,2),  -- Y/A (Yards per Attempt)
+    ay_a DECIMAL(5,2),  -- AY/A (Adjusted Yards per Attempt)
+    y_c DECIMAL(5,2),  -- Y/C (Yards per Completion)
+    y_g DECIMAL(6,2),  -- Y/G (Yards per Game)
+    rate DECIMAL(5,2),  -- Passer Rating
+    qbr DECIMAL(5,2),  -- QBR
+    sk INTEGER,  -- Sacks
+    sk_yds INTEGER,  -- Sack Yards
+    sk_pct DECIMAL(5,2),  -- Sack %
+    ny_a DECIMAL(5,2),  -- NY/A (Net Yards per Attempt)
+    any_a DECIMAL(5,2),  -- ANY/A (Adjusted Net Yards per Attempt)
+    four_qc INTEGER,  -- 4QC (4th Quarter Comebacks)
+    gwd INTEGER,  -- GWD (Game Winning Drives)
+    awards TEXT,  -- Awards
+    player_additional VARCHAR(20),  -- Player-additional
+    
+    -- Metadata
     scraped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
     -- Primary key and constraints
     PRIMARY KEY (pfr_id, season),
-    CONSTRAINT fk_qb_basic_stats_player FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE,
-    CONSTRAINT fk_qb_basic_stats_team FOREIGN KEY (team) REFERENCES teams(team_code) ON DELETE RESTRICT,
-    CONSTRAINT valid_completion_ratio CHECK (attempts = 0 OR (completions <= attempts)),
-    CONSTRAINT valid_games_started CHECK (games_started <= games_played)
+    CONSTRAINT fk_qb_passing_stats_player FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE,
+    CONSTRAINT fk_qb_passing_stats_team FOREIGN KEY (team) REFERENCES teams(team_code) ON DELETE RESTRICT
 );
 
--- Advanced QB Statistics Table (advanced metrics)
--- Uses composite primary key: (pfr_id, season)
-CREATE TABLE IF NOT EXISTS qb_advanced_stats (
+-- QB Splits Type 1 Table (matches advanced_stats_1.csv exactly)
+-- Raw data from splits page with ALL columns
+CREATE TABLE IF NOT EXISTS qb_splits_type1 (
+    id BIGSERIAL PRIMARY KEY,
     pfr_id VARCHAR(20) NOT NULL,
+    player_name VARCHAR(100) NOT NULL,
     season INTEGER NOT NULL CHECK (season >= 1920 AND season <= 2030),
-    qbr DECIMAL(5,2) CHECK (qbr >= 0 AND qbr <= 100),
-    adjusted_net_yards_per_attempt DECIMAL(4,2),
-    fourth_quarter_comebacks INTEGER DEFAULT 0 CHECK (fourth_quarter_comebacks >= 0),
-    game_winning_drives INTEGER DEFAULT 0 CHECK (game_winning_drives >= 0),
+    
+    -- Split identifiers
+    split VARCHAR(50),  -- Split type (e.g., "League", "Place", "Result")
+    value VARCHAR(100),  -- Split value (e.g., "NFL", "Home", "Win")
+    
+    -- Raw CSV columns (matching advanced_stats_1.csv exactly)
+    g INTEGER,  -- Games
+    w INTEGER,  -- Wins
+    l INTEGER,  -- Losses
+    t INTEGER,  -- Ties
+    cmp INTEGER,  -- Completions
+    att INTEGER,  -- Attempts
+    inc INTEGER,  -- Incompletions
+    cmp_pct DECIMAL(5,2),  -- Completion %
+    yds INTEGER,  -- Passing Yards
+    td INTEGER,  -- Passing TDs
+    int INTEGER,  -- Interceptions
+    rate DECIMAL(5,2),  -- Passer Rating
+    sk INTEGER,  -- Sacks
+    sk_yds INTEGER,  -- Sack Yards
+    y_a DECIMAL(5,2),  -- Y/A (Yards per Attempt)
+    ay_a DECIMAL(5,2),  -- AY/A (Adjusted Yards per Attempt)
+    a_g DECIMAL(5,2),  -- A/G (Attempts per Game)
+    y_g DECIMAL(6,2),  -- Y/G (Yards per Game)
+    rush_att INTEGER,  -- Rush Attempts
+    rush_yds INTEGER,  -- Rush Yards
+    rush_y_a DECIMAL(5,2),  -- Rush Y/A
+    rush_td INTEGER,  -- Rush TDs
+    rush_a_g DECIMAL(5,2),  -- Rush A/G (Rush Attempts per Game)
+    rush_y_g DECIMAL(6,2),  -- Rush Y/G (Rush Yards per Game)
+    total_td INTEGER,  -- Total TDs
+    pts INTEGER,  -- Points
+    fmb INTEGER,  -- Fumbles
+    fl INTEGER,  -- Fumbles Lost
+    ff INTEGER,  -- Fumbles Forced
+    fr INTEGER,  -- Fumbles Recovered
+    fr_yds INTEGER,  -- Fumble Recovery Yards
+    fr_td INTEGER,  -- Fumble Recovery TDs
+    
+    -- Metadata
     scraped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
-    -- Primary key and constraints
-    PRIMARY KEY (pfr_id, season),
-    CONSTRAINT fk_qb_advanced_stats_player FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE
+    -- Constraints
+    CONSTRAINT fk_qb_splits_type1_player FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE,
+    CONSTRAINT unique_player_season_split_type1 UNIQUE(pfr_id, season, split, value)
 );
 
--- QB Splits Statistics Table (situational splits)
--- Uses auto-incrementing ID for splits records
-CREATE TABLE IF NOT EXISTS qb_splits (
+-- QB Splits Type 2 Table (matches advanced_stats.2.csv exactly)
+-- Raw data from advanced splits page with ALL columns
+CREATE TABLE IF NOT EXISTS qb_splits_type2 (
     id BIGSERIAL PRIMARY KEY,
     pfr_id VARCHAR(20) NOT NULL,
+    player_name VARCHAR(100) NOT NULL,
     season INTEGER NOT NULL CHECK (season >= 1920 AND season <= 2030),
-    split_type VARCHAR(50) NOT NULL,
-    split_category VARCHAR(100) NOT NULL,
-    games INTEGER DEFAULT 0 CHECK (games >= 0),
-    completions INTEGER DEFAULT 0 CHECK (completions >= 0),
-    attempts INTEGER DEFAULT 0 CHECK (attempts >= 0),
-    completion_pct DECIMAL(5,2) CHECK (completion_pct >= 0 AND completion_pct <= 100),
-    pass_yards INTEGER DEFAULT 0,
-    pass_tds INTEGER DEFAULT 0 CHECK (pass_tds >= 0),
-    interceptions INTEGER DEFAULT 0 CHECK (interceptions >= 0),
-    rating DECIMAL(5,2) CHECK (rating >= 0 AND rating <= 158.3),
-    sacks INTEGER DEFAULT 0 CHECK (sacks >= 0),
-    sack_yards INTEGER DEFAULT 0,
-    net_yards_per_attempt DECIMAL(4,2),
+    
+    -- Split identifiers
+    split VARCHAR(50),  -- Split type (e.g., "Down", "Yards To Go")
+    value VARCHAR(100),  -- Split value (e.g., "1st", "1-3")
+    
+    -- Raw CSV columns (matching advanced_stats.2.csv exactly)
+    cmp INTEGER,  -- Completions
+    att INTEGER,  -- Attempts
+    inc INTEGER,  -- Incompletions
+    cmp_pct DECIMAL(5,2),  -- Completion %
+    yds INTEGER,  -- Passing Yards
+    td INTEGER,  -- Passing TDs
+    first_downs INTEGER,  -- 1D (First Downs)
+    int INTEGER,  -- Interceptions
+    rate DECIMAL(5,2),  -- Passer Rating
+    sk INTEGER,  -- Sacks
+    sk_yds INTEGER,  -- Sack Yards
+    y_a DECIMAL(5,2),  -- Y/A (Yards per Attempt)
+    ay_a DECIMAL(5,2),  -- AY/A (Adjusted Yards per Attempt)
+    rush_att INTEGER,  -- Rush Attempts
+    rush_yds INTEGER,  -- Rush Yards
+    rush_y_a DECIMAL(5,2),  -- Rush Y/A
+    rush_td INTEGER,  -- Rush TDs
+    rush_first_downs INTEGER,  -- Rush First Downs
+    
+    -- Metadata
     scraped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
-    -- Additional fields for comprehensive QB splits data
-    rush_attempts INTEGER DEFAULT 0 CHECK (rush_attempts >= 0),
-    rush_yards INTEGER DEFAULT 0,
-    rush_tds INTEGER DEFAULT 0 CHECK (rush_tds >= 0),
-    fumbles INTEGER DEFAULT 0 CHECK (fumbles >= 0),
-    fumbles_lost INTEGER DEFAULT 0 CHECK (fumbles_lost >= 0),
-    fumbles_forced INTEGER DEFAULT 0 CHECK (fumbles_forced >= 0),
-    fumbles_recovered INTEGER DEFAULT 0 CHECK (fumbles_recovered >= 0),
-    fumble_recovery_yards INTEGER DEFAULT 0,
-    fumble_recovery_tds INTEGER DEFAULT 0 CHECK (fumble_recovery_tds >= 0),
-    incompletions INTEGER DEFAULT 0 CHECK (incompletions >= 0),
-    wins INTEGER DEFAULT 0 CHECK (wins >= 0),
-    losses INTEGER DEFAULT 0 CHECK (losses >= 0),
-    ties INTEGER DEFAULT 0 CHECK (ties >= 0),
-    attempts_per_game DECIMAL(4,2),
-    yards_per_game DECIMAL(6,2),
-    rush_attempts_per_game DECIMAL(4,2),
-    rush_yards_per_game DECIMAL(6,2),
-    total_tds INTEGER DEFAULT 0 CHECK (total_tds >= 0),
-    points INTEGER DEFAULT 0,
-    
     -- Constraints
-    CONSTRAINT fk_qb_splits_player FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE,
-    CONSTRAINT unique_player_season_split UNIQUE(pfr_id, season, split_type, split_category),
-    CONSTRAINT valid_split_completion_ratio CHECK (attempts = 0 OR (completions <= attempts)),
-    CONSTRAINT valid_fumbles_lost CHECK (fumbles_lost <= fumbles),
-    CONSTRAINT valid_fumbles_recovered CHECK (fumbles_recovered <= fumbles),
-    CONSTRAINT valid_total_tds CHECK (total_tds >= (pass_tds + rush_tds + fumble_recovery_tds))
-);
-
--- Game Log Table (for individual game performance)
-CREATE TABLE IF NOT EXISTS qb_game_log (
-    id BIGSERIAL PRIMARY KEY,
-    pfr_id VARCHAR(20) NOT NULL,
-    season INTEGER NOT NULL,
-    week INTEGER NOT NULL CHECK (week >= 1 AND week <= 22),
-    game_date DATE NOT NULL,
-    opponent VARCHAR(3) NOT NULL,
-    home_away VARCHAR(4) CHECK (home_away IN ('Home', 'Away')),
-    result game_result,
-    completions INTEGER DEFAULT 0 CHECK (completions >= 0),
-    attempts INTEGER DEFAULT 0 CHECK (attempts >= 0),
-    completion_pct DECIMAL(5,2),
-    pass_yards INTEGER DEFAULT 0,
-    pass_tds INTEGER DEFAULT 0 CHECK (pass_tds >= 0),
-    interceptions INTEGER DEFAULT 0 CHECK (interceptions >= 0),
-    rating DECIMAL(5,2) CHECK (rating >= 0 AND rating <= 158.3),
-    sacks INTEGER DEFAULT 0 CHECK (sacks >= 0),
-    sack_yards INTEGER DEFAULT 0,
-    rush_attempts INTEGER DEFAULT 0 CHECK (rush_attempts >= 0),
-    rush_yards INTEGER DEFAULT 0,
-    rush_tds INTEGER DEFAULT 0 CHECK (rush_tds >= 0),
-    fumbles INTEGER DEFAULT 0 CHECK (fumbles >= 0),
-    fumbles_lost INTEGER DEFAULT 0 CHECK (fumbles_lost >= 0),
-    game_winning_drive BOOLEAN DEFAULT FALSE,
-    fourth_quarter_comeback BOOLEAN DEFAULT FALSE,
-    weather weather_condition,
-    temperature INTEGER,
-    wind_speed INTEGER,
-    field_surface field_surface,
-    scraped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Constraints
-    CONSTRAINT fk_qb_game_log_player FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE,
-    CONSTRAINT fk_qb_game_log_opponent FOREIGN KEY (opponent) REFERENCES teams(team_code) ON DELETE RESTRICT,
-    CONSTRAINT unique_player_game UNIQUE(pfr_id, season, week, game_date),
-    CONSTRAINT valid_game_completion_ratio CHECK (attempts = 0 OR (completions <= attempts)),
-    CONSTRAINT valid_fumbles_lost CHECK (fumbles_lost <= fumbles)
+    CONSTRAINT fk_qb_splits_type2_player FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE,
+    CONSTRAINT unique_player_season_split_type2 UNIQUE(pfr_id, season, split, value)
 );
 
 -- Scraping Log Table (for monitoring and audit trail)
@@ -200,68 +206,69 @@ CREATE TABLE IF NOT EXISTS scraping_log (
     successful_requests INTEGER DEFAULT 0 CHECK (successful_requests >= 0),
     failed_requests INTEGER DEFAULT 0 CHECK (failed_requests >= 0),
     total_players INTEGER DEFAULT 0 CHECK (total_players >= 0),
-    total_basic_stats INTEGER DEFAULT 0 CHECK (total_basic_stats >= 0),
-    total_advanced_stats INTEGER DEFAULT 0 CHECK (total_advanced_stats >= 0),
-    total_qb_splits INTEGER DEFAULT 0 CHECK (total_qb_splits >= 0),
+    total_passing_stats INTEGER DEFAULT 0 CHECK (total_passing_stats >= 0),
+    total_splits_type1 INTEGER DEFAULT 0 CHECK (total_splits_type1 >= 0),
+    total_splits_type2 INTEGER DEFAULT 0 CHECK (total_splits_type2 >= 0),
     errors TEXT[],
     warnings TEXT[],
     rate_limit_violations INTEGER DEFAULT 0 CHECK (rate_limit_violations >= 0),
-    processing_time_seconds DECIMAL(10,2),
+    processing_time_seconds DECIMAL(10,3),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
-    CONSTRAINT valid_request_counts CHECK (successful_requests + failed_requests = total_requests)
+    -- Constraints
+    CONSTRAINT valid_requests CHECK (total_requests = successful_requests + failed_requests)
 );
 
--- Indexes for Performance Optimization
--- Player Indexes
+-- Indexes for performance optimization
+
+-- Player table indexes
 CREATE INDEX IF NOT EXISTS idx_players_name ON players(player_name);
 CREATE INDEX IF NOT EXISTS idx_players_position ON players(position);
 CREATE INDEX IF NOT EXISTS idx_players_college ON players(college);
 CREATE INDEX IF NOT EXISTS idx_players_draft_year ON players(draft_year);
 
--- Team Indexes
+-- Team table indexes
 CREATE INDEX IF NOT EXISTS idx_teams_conference ON teams(conference);
 CREATE INDEX IF NOT EXISTS idx_teams_division ON teams(division);
 
--- Basic Stats Indexes
-CREATE INDEX IF NOT EXISTS idx_qb_basic_stats_season ON qb_basic_stats(season);
-CREATE INDEX IF NOT EXISTS idx_qb_basic_stats_team ON qb_basic_stats(team);
-CREATE INDEX IF NOT EXISTS idx_qb_basic_stats_rating ON qb_basic_stats(rating DESC);
-CREATE INDEX IF NOT EXISTS idx_qb_basic_stats_pass_yards ON qb_basic_stats(pass_yards DESC);
-CREATE INDEX IF NOT EXISTS idx_qb_basic_stats_pass_tds ON qb_basic_stats(pass_tds DESC);
-CREATE INDEX IF NOT EXISTS idx_qb_basic_stats_completion_pct ON qb_basic_stats(completion_pct DESC);
+-- QB Passing Stats table indexes
+CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_season ON qb_passing_stats(season);
+CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_team ON qb_passing_stats(team);
+CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_player_name ON qb_passing_stats(player_name);
+CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_rate ON qb_passing_stats(rate DESC);
+CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_yds ON qb_passing_stats(yds DESC);
+CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_td ON qb_passing_stats(td DESC);
+CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_cmp_pct ON qb_passing_stats(cmp_pct DESC);
+CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_qbr ON qb_passing_stats(qbr DESC);
 
--- Advanced Stats Indexes
-CREATE INDEX IF NOT EXISTS idx_qb_advanced_stats_season ON qb_advanced_stats(season);
-CREATE INDEX IF NOT EXISTS idx_qb_advanced_stats_qbr ON qb_advanced_stats(qbr DESC);
+-- QB Splits Type 1 table indexes
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_pfr_id ON qb_splits_type1(pfr_id);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_season ON qb_splits_type1(season);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_split ON qb_splits_type1(split);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_value ON qb_splits_type1(value);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_player_season ON qb_splits_type1(pfr_id, season);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_split_value ON qb_splits_type1(split, value);
 
--- Splits Indexes
-CREATE INDEX IF NOT EXISTS idx_qb_splits_pfr_id ON qb_splits(pfr_id);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_season ON qb_splits(season);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_split_type ON qb_splits(split_type);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_split_category ON qb_splits(split_category);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_player_season ON qb_splits(pfr_id, season);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type_category ON qb_splits(split_type, split_category);
+-- QB Splits Type 2 table indexes
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_pfr_id ON qb_splits_type2(pfr_id);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_season ON qb_splits_type2(season);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_split ON qb_splits_type2(split);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_value ON qb_splits_type2(value);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_player_season ON qb_splits_type2(pfr_id, season);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_split_value ON qb_splits_type2(split, value);
 
--- Game Log Indexes
-CREATE INDEX IF NOT EXISTS idx_game_log_pfr_id ON qb_game_log(pfr_id);
-CREATE INDEX IF NOT EXISTS idx_game_log_season ON qb_game_log(season);
-CREATE INDEX IF NOT EXISTS idx_game_log_week ON qb_game_log(week);
-CREATE INDEX IF NOT EXISTS idx_game_log_game_date ON qb_game_log(game_date);
-CREATE INDEX IF NOT EXISTS idx_game_log_opponent ON qb_game_log(opponent);
-CREATE INDEX IF NOT EXISTS idx_game_log_home_away ON qb_game_log(home_away);
-
--- Scraping Log Indexes
+-- Scraping log table indexes
 CREATE INDEX IF NOT EXISTS idx_scraping_log_session_id ON scraping_log(session_id);
 CREATE INDEX IF NOT EXISTS idx_scraping_log_season ON scraping_log(season);
 CREATE INDEX IF NOT EXISTS idx_scraping_log_start_time ON scraping_log(start_time);
 
--- Composite Indexes for Common Queries
-CREATE INDEX IF NOT EXISTS idx_qb_basic_stats_season_rating ON qb_basic_stats(season, rating DESC);
-CREATE INDEX IF NOT EXISTS idx_qb_basic_stats_team_season ON qb_basic_stats(team, season);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_season_type ON qb_splits(season, split_type);
+-- Composite indexes for common queries
+CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_season_rate ON qb_passing_stats(season, rate DESC);
+CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_team_season ON qb_passing_stats(team, season);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_season_split ON qb_splits_type1(season, split);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_season_split ON qb_splits_type2(season, split);
 
--- Updated At Trigger Function
+-- Trigger function for updating updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -270,337 +277,168 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Apply Updated At Triggers
+-- Triggers for auto-updating updated_at columns
 CREATE TRIGGER update_players_updated_at 
     BEFORE UPDATE ON players 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_qb_basic_stats_updated_at 
-    BEFORE UPDATE ON qb_basic_stats 
+CREATE TRIGGER update_qb_passing_stats_updated_at 
+    BEFORE UPDATE ON qb_passing_stats 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_qb_advanced_stats_updated_at 
-    BEFORE UPDATE ON qb_advanced_stats 
+CREATE TRIGGER update_qb_splits_type1_updated_at 
+    BEFORE UPDATE ON qb_splits_type1 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_qb_splits_updated_at 
-    BEFORE UPDATE ON qb_splits 
+CREATE TRIGGER update_qb_splits_type2_updated_at 
+    BEFORE UPDATE ON qb_splits_type2 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Useful Views for Analytics
--- QB Season Summary View (combines basic and advanced stats)
+-- Helpful views for data analysis
+
+-- Season summary view (combines all data types)
 CREATE OR REPLACE VIEW qb_season_summary AS
 SELECT 
     p.pfr_id,
     p.player_name,
-    p.first_name,
-    p.last_name,
-    p.position,
-    p.college,
-    p.draft_year,
-    p.draft_round,
-    p.draft_pick,
-    bs.season,
-    bs.team,
-    bs.games_played,
-    bs.games_started,
-    bs.completions,
-    bs.attempts,
-    bs.completion_pct,
-    bs.pass_yards,
-    bs.pass_tds,
-    bs.interceptions,
-    bs.longest_pass,
-    bs.rating,
-    bs.sacks,
-    bs.sack_yards,
-    bs.net_yards_per_attempt,
-    -- Advanced stats
-    adv.qbr,
-    adv.adjusted_net_yards_per_attempt,
-    adv.fourth_quarter_comebacks,
-    adv.game_winning_drives,
-    -- Calculated fields
-    CASE 
-        WHEN bs.attempts > 0 THEN ROUND((bs.pass_yards::DECIMAL / bs.attempts), 2)
-        ELSE NULL 
-    END as yards_per_attempt,
-    CASE 
-        WHEN bs.attempts > 0 THEN ROUND((bs.pass_tds::DECIMAL / bs.attempts * 100), 2)
-        ELSE NULL 
-    END as td_percentage,
-    CASE 
-        WHEN bs.attempts > 0 THEN ROUND((bs.interceptions::DECIMAL / bs.attempts * 100), 2)
-        ELSE NULL 
-    END as int_percentage
+    ps.season,
+    ps.team,
+    ps.age,
+    ps.g as games,
+    ps.gs as games_started,
+    ps.cmp as completions,
+    ps.att as attempts,
+    ps.cmp_pct as completion_pct,
+    ps.yds as pass_yards,
+    ps.td as pass_tds,
+    ps.int as interceptions,
+    ps.rate as passer_rating,
+    ps.qbr,
+    ps.sk as sacks,
+    ps.sk_yds as sack_yards,
+    ps.four_qc as fourth_quarter_comebacks,
+    ps.gwd as game_winning_drives,
+    ps.awards
 FROM players p
-JOIN qb_basic_stats bs ON p.pfr_id = bs.pfr_id
-LEFT JOIN qb_advanced_stats adv ON p.pfr_id = adv.pfr_id AND bs.season = adv.season
-WHERE p.position = 'QB';
+JOIN qb_passing_stats ps ON p.pfr_id = ps.pfr_id
+ORDER BY ps.season DESC, ps.rate DESC NULLS LAST;
 
--- QB Home/Away Splits View
-CREATE OR REPLACE VIEW qb_home_away_splits AS
-SELECT 
-    p.pfr_id,
-    p.player_name,
-    s.season,
-    s.split_category,
-    s.games,
-    s.completions,
-    s.attempts,
-    s.completion_pct,
-    s.pass_yards,
-    s.pass_tds,
-    s.interceptions,
-    s.rating,
-    s.sacks,
-    s.net_yards_per_attempt,
-    s.rush_attempts,
-    s.rush_yards,
-    s.rush_tds,
-    s.total_tds,
-    s.wins,
-    s.losses,
-    s.ties,
-    CASE 
-        WHEN s.games > 0 THEN ROUND(s.wins::DECIMAL / s.games * 100, 1)
-        ELSE NULL 
-    END as win_percentage
-FROM players p
-JOIN qb_splits s ON p.pfr_id = s.pfr_id
-WHERE s.split_type = 'basic_splits' 
-AND s.split_category IN ('Home', 'Road')
-AND p.position = 'QB';
-
--- QB Quarter Performance View
-CREATE OR REPLACE VIEW qb_quarter_performance AS
-SELECT 
-    p.pfr_id,
-    p.player_name,
-    s.season,
-    s.split_category,
-    s.games,
-    s.completions,
-    s.attempts,
-    s.completion_pct,
-    s.pass_yards,
-    s.pass_tds,
-    s.interceptions,
-    s.rating,
-    s.net_yards_per_attempt,
-    CASE 
-        WHEN s.attempts > 0 THEN ROUND(s.pass_yards::DECIMAL / s.attempts, 2)
-        ELSE NULL 
-    END as yards_per_attempt
-FROM players p
-JOIN qb_splits s ON p.pfr_id = s.pfr_id
-WHERE s.split_type = 'advanced_splits' 
-AND s.split_category IN ('1st Qtr', '2nd Qtr', '3rd Qtr', '4th Qtr', 'OT')
-AND p.position = 'QB';
-
--- QB Red Zone Performance View
-CREATE OR REPLACE VIEW qb_red_zone_performance AS
-SELECT 
-    p.pfr_id,
-    p.player_name,
-    s.season,
-    s.split_category,
-    s.games,
-    s.completions,
-    s.attempts,
-    s.completion_pct,
-    s.pass_yards,
-    s.pass_tds,
-    s.interceptions,
-    s.rating,
-    s.net_yards_per_attempt,
-    CASE 
-        WHEN s.attempts > 0 THEN ROUND(s.pass_tds::DECIMAL / s.attempts * 100, 2)
-        ELSE NULL 
-    END as td_percentage
-FROM players p
-JOIN qb_splits s ON p.pfr_id = s.pfr_id
-WHERE s.split_type = 'advanced_splits' 
-AND s.split_category IN ('Red Zone', 'Opp 1-10')
-AND p.position = 'QB';
-
--- QB vs Winning Teams View
-CREATE OR REPLACE VIEW qb_vs_winning_teams AS
-SELECT 
-    p.pfr_id,
-    p.player_name,
-    s.season,
-    s.split_category,
-    s.games,
-    s.completions,
-    s.attempts,
-    s.completion_pct,
-    s.pass_yards,
-    s.pass_tds,
-    s.interceptions,
-    s.rating,
-    s.net_yards_per_attempt,
-    s.wins,
-    s.losses,
-    s.ties,
-    CASE 
-        WHEN s.games > 0 THEN ROUND(s.wins::DECIMAL / s.games * 100, 1)
-        ELSE NULL 
-    END as win_percentage
-FROM players p
-JOIN qb_splits s ON p.pfr_id = s.pfr_id
-WHERE s.split_type = 'basic_splits' 
-AND s.split_category IN ('0-7 points', '8-14 points', '15+ points')
-AND p.position = 'QB';
-
--- Functions for Data Retrieval
-CREATE OR REPLACE FUNCTION get_qb_stats_by_season(target_season INTEGER)
-RETURNS TABLE (
-    pfr_id VARCHAR(20),
-    player_name VARCHAR(100),
-    team VARCHAR(3),
-    games_played INTEGER,
-    completions INTEGER,
-    attempts INTEGER,
-    completion_pct DECIMAL(5,2),
-    pass_yards INTEGER,
-    pass_tds INTEGER,
-    interceptions INTEGER,
-    rating DECIMAL(5,2),
-    qbr DECIMAL(5,2),
-    sacks INTEGER,
-    net_yards_per_attempt DECIMAL(4,2)
+-- Function to get all data for a specific player and season
+CREATE OR REPLACE FUNCTION get_player_season_data(target_pfr_id VARCHAR(20), target_season INTEGER)
+RETURNS TABLE(
+    data_type VARCHAR(20),
+    json_data JSONB
 ) AS $$
 BEGIN
+    -- Return passing stats
     RETURN QUERY
     SELECT 
-        p.pfr_id,
-        p.player_name,
-        bs.team,
-        bs.games_played,
-        bs.completions,
-        bs.attempts,
-        bs.completion_pct,
-        bs.pass_yards,
-        bs.pass_tds,
-        bs.interceptions,
-        bs.rating,
-        adv.qbr,
-        bs.sacks,
-        bs.net_yards_per_attempt
-    FROM players p
-    JOIN qb_basic_stats bs ON p.pfr_id = bs.pfr_id
-    LEFT JOIN qb_advanced_stats adv ON p.pfr_id = adv.pfr_id AND bs.season = adv.season
-    WHERE bs.season = target_season
-    AND p.position = 'QB'
-    ORDER BY bs.rating DESC NULLS LAST;
+        'passing_stats'::VARCHAR(20) as data_type,
+        row_to_json(ps)::JSONB as json_data
+    FROM qb_passing_stats ps
+    WHERE ps.pfr_id = target_pfr_id AND ps.season = target_season;
+    
+    -- Return splits type 1
+    RETURN QUERY
+    SELECT 
+        'splits_type1'::VARCHAR(20) as data_type,
+        row_to_json(s1)::JSONB as json_data
+    FROM qb_splits_type1 s1
+    WHERE s1.pfr_id = target_pfr_id AND s1.season = target_season;
+    
+    -- Return splits type 2
+    RETURN QUERY
+    SELECT 
+        'splits_type2'::VARCHAR(20) as data_type,
+        row_to_json(s2)::JSONB as json_data
+    FROM qb_splits_type2 s2
+    WHERE s2.pfr_id = target_pfr_id AND s2.season = target_season;
+    
+    RETURN;
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to get QB splits by type
-CREATE OR REPLACE FUNCTION get_qb_splits_by_type(
-    target_pfr_id VARCHAR(20),
-    target_season INTEGER,
-    target_split_type VARCHAR(50)
+-- Function to get splits data by type
+CREATE OR REPLACE FUNCTION get_splits_by_type(
+    target_pfr_id VARCHAR(20), 
+    target_season INTEGER, 
+    split_type VARCHAR(50)
 )
-RETURNS TABLE (
-    split_category VARCHAR(100),
-    games INTEGER,
-    completions INTEGER,
-    attempts INTEGER,
-    completion_pct DECIMAL(5,2),
-    pass_yards INTEGER,
-    pass_tds INTEGER,
-    interceptions INTEGER,
-    rating DECIMAL(5,2),
-    sacks INTEGER,
-    net_yards_per_attempt DECIMAL(4,2),
-    rush_attempts INTEGER,
-    rush_yards INTEGER,
-    rush_tds INTEGER,
-    total_tds INTEGER,
-    wins INTEGER,
-    losses INTEGER,
-    ties INTEGER
+RETURNS TABLE(
+    table_name VARCHAR(20),
+    split VARCHAR(50),
+    value VARCHAR(100),
+    json_data JSONB
 ) AS $$
 BEGIN
+    -- Return from splits type 1
     RETURN QUERY
     SELECT 
-        s.split_category,
-        s.games,
-        s.completions,
-        s.attempts,
-        s.completion_pct,
-        s.pass_yards,
-        s.pass_tds,
-        s.interceptions,
-        s.rating,
-        s.sacks,
-        s.net_yards_per_attempt,
-        s.rush_attempts,
-        s.rush_yards,
-        s.rush_tds,
-        s.total_tds,
-        s.wins,
-        s.losses,
-        s.ties
-    FROM qb_splits s
-    WHERE s.pfr_id = target_pfr_id
-    AND s.season = target_season
-    AND s.split_type = target_split_type
-    ORDER BY s.split_category;
+        'qb_splits_type1'::VARCHAR(20) as table_name,
+        s1.split,
+        s1.value,
+        row_to_json(s1)::JSONB as json_data
+    FROM qb_splits_type1 s1
+    WHERE s1.pfr_id = target_pfr_id 
+      AND s1.season = target_season 
+      AND s1.split = split_type;
+    
+    -- Return from splits type 2
+    RETURN QUERY
+    SELECT 
+        'qb_splits_type2'::VARCHAR(20) as table_name,
+        s2.split,
+        s2.value,
+        row_to_json(s2)::JSONB as json_data
+    FROM qb_splits_type2 s2
+    WHERE s2.pfr_id = target_pfr_id 
+      AND s2.season = target_season 
+      AND s2.split = split_type;
+    
+    RETURN;
 END;
 $$ LANGUAGE plpgsql;
 
--- Database Statistics View
+-- Database statistics view
 CREATE OR REPLACE VIEW database_stats AS
 SELECT 
     'players' as table_name,
     COUNT(*) as record_count,
-    MAX(created_at) as last_updated
+    MIN(created_at) as earliest_record,
+    MAX(created_at) as latest_record
 FROM players
 UNION ALL
 SELECT 
-    'qb_basic_stats' as table_name,
+    'qb_passing_stats' as table_name,
     COUNT(*) as record_count,
-    MAX(updated_at) as last_updated
-FROM qb_basic_stats
+    MIN(scraped_at) as earliest_record,
+    MAX(scraped_at) as latest_record
+FROM qb_passing_stats
 UNION ALL
 SELECT 
-    'qb_advanced_stats' as table_name,
+    'qb_splits_type1' as table_name,
     COUNT(*) as record_count,
-    MAX(updated_at) as last_updated
-FROM qb_advanced_stats
+    MIN(scraped_at) as earliest_record,
+    MAX(scraped_at) as latest_record
+FROM qb_splits_type1
 UNION ALL
 SELECT 
-    'qb_splits' as table_name,
+    'qb_splits_type2' as table_name,
     COUNT(*) as record_count,
-    MAX(updated_at) as last_updated
-FROM qb_splits
-UNION ALL
-SELECT 
-    'qb_game_log' as table_name,
-    COUNT(*) as record_count,
-    MAX(scraped_at) as last_updated
-FROM qb_game_log
-UNION ALL
-SELECT 
-    'teams' as table_name,
-    COUNT(*) as record_count,
-    MAX(created_at) as last_updated
-FROM teams
+    MIN(scraped_at) as earliest_record,
+    MAX(scraped_at) as latest_record
+FROM qb_splits_type2
 UNION ALL
 SELECT 
     'scraping_log' as table_name,
     COUNT(*) as record_count,
-    MAX(created_at) as last_updated
-FROM scraping_log;
+    MIN(created_at) as earliest_record,
+    MAX(created_at) as latest_record
+FROM scraping_log
+ORDER BY table_name;
 
--- Enable Row Level Security
-ALTER TABLE players ENABLE ROW LEVEL SECURITY;
-ALTER TABLE qb_basic_stats ENABLE ROW LEVEL SECURITY;
-ALTER TABLE qb_advanced_stats ENABLE ROW LEVEL SECURITY;
-ALTER TABLE qb_splits ENABLE ROW LEVEL SECURITY;
-ALTER TABLE qb_game_log ENABLE ROW LEVEL SECURITY;
-ALTER TABLE teams ENABLE ROW LEVEL SECURITY;
-ALTER TABLE scraping_log ENABLE ROW LEVEL SECURITY; 
+-- Grant permissions for Supabase
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated; 

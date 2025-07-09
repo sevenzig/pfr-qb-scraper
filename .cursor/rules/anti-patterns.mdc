@@ -1,0 +1,641 @@
+# Anti-Patterns and Common Mistakes
+*Learn from common pitfalls to maintain code quality during migration*
+
+## Code Quality Anti-Patterns
+
+### God Classes and Functions
+- **NEVER create god classes** with > 10 methods
+- **AVOID functions with > 50 lines** or > 5 parameters
+- **NEVER use global variables** for state management
+- **AVOID deep nesting** (> 3 levels)
+- **NEVER duplicate code** - create shared utilities
+
+### Examples of Code Smells
+```python
+# ❌ BAD - God class doing everything
+class MegaScraper:
+    """This class does everything - BAD!"""
+    
+    def __init__(self):
+        self.db_connection = None
+        self.rate_limiter = None
+        self.html_parser = None
+        self.data_validator = None
+        self.file_manager = None
+        self.email_notifier = None
+        self.report_generator = None
+        self.cache_manager = None
+        self.config_manager = None
+        self.logger = None
+    
+    def scrape_stats(self): pass
+    def parse_html(self): pass
+    def validate_data(self): pass
+    def save_to_database(self): pass
+    def send_notifications(self): pass
+    def generate_reports(self): pass
+    def manage_cache(self): pass
+    def handle_errors(self): pass
+    def configure_settings(self): pass
+    def log_operations(self): pass
+    def cleanup_files(self): pass
+    def backup_data(self): pass
+
+# ✅ GOOD - Focused, single-responsibility classes
+class CoreScraper:
+    """Handles only scraping logic."""
+    
+    def __init__(self, config: ScrapingConfig):
+        self.config = config
+        self.session = self._create_session()
+    
+    def scrape_player_stats(self, player_name: str, season: int) -> PlayerStats:
+        """Scrape stats for a single player."""
+        # Implementation focused only on scraping
+        pass
+    
+    def _create_session(self) -> requests.Session:
+        """Create configured session."""
+        pass
+
+class DataValidator:
+    """Handles only data validation."""
+    
+    def validate_player_stats(self, stats: PlayerStats) -> List[str]:
+        """Validate player statistics."""
+        pass
+
+class DatabaseManager:
+    """Handles only database operations."""
+    
+    def save_player_stats(self, stats: PlayerStats) -> None:
+        """Save stats to database."""
+        pass
+```
+
+### Function Complexity Problems
+```python
+# ❌ BAD - Complex function with too many responsibilities
+def process_player_data(player_name, season, include_splits=True, validate=True, 
+                       save_to_db=True, send_notifications=False, generate_report=False,
+                       backup_data=False, cache_results=True):
+    """This function does too much!"""
+    
+    # 100+ lines of mixed responsibilities
+    if validate:
+        # Validation logic
+        if not player_name:
+            return None
+        if season < 1950 or season > 2024:
+            return None
+    
+    # Scraping logic
+    url = f"https://pro-football-reference.com/players/{player_name[0]}/{player_name}.htm"
+    response = requests.get(url)
+    
+    # Parsing logic
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # Data processing
+    stats = {}
+    # ... complex parsing logic
+    
+    # Database operations
+    if save_to_db:
+        conn = sqlite3.connect('database.db')
+        # ... database logic
+    
+    # Notification logic
+    if send_notifications:
+        # ... email sending logic
+    
+    # Report generation
+    if generate_report:
+        # ... report generation logic
+    
+    # And so on...
+    
+    return stats
+
+# ✅ GOOD - Focused functions with single responsibilities
+def scrape_player_stats(player_name: str, season: int) -> PlayerStats:
+    """Scrape stats for a single player - one responsibility."""
+    url = build_player_url(player_name)
+    response = make_request(url)
+    return parse_player_stats(response, season)
+
+def validate_player_stats(stats: PlayerStats) -> List[str]:
+    """Validate player statistics - one responsibility."""
+    errors = []
+    if stats.completions > stats.attempts:
+        errors.append("Completions cannot exceed attempts")
+    return errors
+
+def save_player_stats(stats: PlayerStats) -> None:
+    """Save stats to database - one responsibility."""
+    with db_manager.get_connection() as conn:
+        conn.execute(INSERT_QUERY, stats.to_tuple())
+```
+
+## Architecture Anti-Patterns
+
+### Circular Dependencies
+```python
+# ❌ BAD - Circular dependency
+# scraper.py
+from .validator import DataValidator
+
+class CoreScraper:
+    def __init__(self):
+        self.validator = DataValidator(self)  # Passing self creates circular dependency
+
+# validator.py
+from .scraper import CoreScraper
+
+class DataValidator:
+    def __init__(self, scraper: CoreScraper):
+        self.scraper = scraper  # Circular reference!
+    
+    def validate_and_rescrape(self, stats):
+        if not self.is_valid(stats):
+            return self.scraper.scrape_again()  # Circular call
+
+# ✅ GOOD - Dependency injection without circular references
+# scraper.py
+from .validator import DataValidator
+
+class CoreScraper:
+    def __init__(self, validator: DataValidator):
+        self.validator = validator  # Injected dependency
+    
+    def scrape_player_stats(self, player_name: str, season: int) -> PlayerStats:
+        stats = self._scrape_raw_stats(player_name, season)
+        validation_errors = self.validator.validate(stats)
+        if validation_errors:
+            raise ValidationError(validation_errors)
+        return stats
+
+# validator.py
+class DataValidator:
+    def validate(self, stats: PlayerStats) -> List[str]:
+        """Validate without depending on scraper."""
+        errors = []
+        # Validation logic without circular dependency
+        return errors
+```
+
+### Tight Coupling
+```python
+# ❌ BAD - Tightly coupled to specific implementation
+class ScrapingService:
+    def __init__(self):
+        self.db = sqlite3.connect('database.db')  # Tight coupling to SQLite
+        self.cache = Redis(host='localhost', port=6379)  # Tight coupling to Redis
+    
+    def scrape_and_save(self, player_name: str):
+        stats = self.scrape_player(player_name)
+        
+        # Tightly coupled to specific database implementation
+        cursor = self.db.cursor()
+        cursor.execute(
+            "INSERT INTO players (name, stats) VALUES (?, ?)",
+            (player_name, json.dumps(stats))
+        )
+        self.db.commit()
+        
+        # Tightly coupled to specific cache implementation
+        self.cache.set(f"player:{player_name}", json.dumps(stats))
+
+# ✅ GOOD - Loosely coupled with interfaces
+from abc import ABC, abstractmethod
+
+class DatabaseInterface(ABC):
+    @abstractmethod
+    def save_player_stats(self, stats: PlayerStats) -> None:
+        pass
+
+class CacheInterface(ABC):
+    @abstractmethod
+    def set(self, key: str, value: str) -> None:
+        pass
+
+class ScrapingService:
+    def __init__(self, database: DatabaseInterface, cache: CacheInterface):
+        self.database = database
+        self.cache = cache
+    
+    def scrape_and_save(self, player_name: str):
+        stats = self.scrape_player(player_name)
+        
+        # Loosely coupled - can use any database implementation
+        self.database.save_player_stats(stats)
+        
+        # Loosely coupled - can use any cache implementation
+        self.cache.set(f"player:{player_name}", stats.to_json())
+```
+
+### Business Logic in Wrong Places
+```python
+# ❌ BAD - Business logic in CLI handler
+class ScrapeCommand:
+    def execute(self, args):
+        player_name = args.player_name
+        season = args.season
+        
+        # Business logic in CLI - BAD!
+        url = f"https://pro-football-reference.com/players/{player_name[0]}/{player_name}.htm"
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Complex parsing logic in CLI - BAD!
+        stats_table = soup.find('table', {'id': 'passing'})
+        stats = {}
+        for row in stats_table.find_all('tr')[1:]:
+            cols = row.find_all('td')
+            stats['completions'] = int(cols[0].text)
+            stats['attempts'] = int(cols[1].text)
+            # ... more parsing
+        
+        # Database operations in CLI - BAD!
+        conn = sqlite3.connect('database.db')
+        cursor = conn.cursor()
+        cursor.execute(INSERT_QUERY, (player_name, season, stats['completions']))
+        conn.commit()
+        
+        print(f"Scraped {player_name} successfully")
+
+# ✅ GOOD - CLI delegates to business logic
+class ScrapeCommand:
+    def __init__(self, scraping_service: ScrapingService):
+        self.scraping_service = scraping_service
+    
+    def execute(self, args):
+        try:
+            # CLI only handles argument parsing and user interaction
+            result = self.scraping_service.scrape_player_stats(
+                args.player_name, 
+                args.season
+            )
+            print(f"Successfully scraped {result.player_name}")
+        except Exception as e:
+            print(f"Error: {e}")
+```
+
+## Migration-Specific Anti-Patterns
+
+### Breaking Existing Functionality
+```python
+# ❌ BAD - Breaking changes during migration
+def migrate_scraper():
+    # Don't do this during Phases 1-3!
+    os.remove('scripts/enhanced_qb_scraper.py')
+    os.remove('scripts/robust_qb_scraper.py')
+    
+    # This breaks existing user workflows
+    db.execute("DROP TABLE qb_stats")
+    db.execute("CREATE TABLE qb_season_stats (...)")
+
+# ✅ GOOD - Gradual migration with deprecation warnings
+def migrate_scraper():
+    # Keep old scripts working
+    add_deprecation_warning('scripts/enhanced_qb_scraper.py')
+    
+    # Add new functionality alongside old
+    create_new_cli_commands()
+    
+    # Only remove old functionality in Phase 4
+    if is_phase_4():
+        move_to_legacy_folder('scripts/enhanced_qb_scraper.py')
+```
+
+### Big Bang Changes
+```python
+# ❌ BAD - Trying to change everything at once
+def massive_refactor():
+    # Don't do this - too much risk!
+    rewrite_all_scrapers()
+    change_database_schema()
+    create_new_cli()
+    update_all_documentation()
+    migrate_all_users()
+    deprecate_old_system()
+    # All at once = disaster
+
+# ✅ GOOD - Incremental changes
+def incremental_migration():
+    # Phase 1: Foundation
+    create_cli_framework()
+    test_cli_framework()
+    
+    # Phase 2: Core Migration
+    migrate_scraper_functionality()
+    test_scraper_equivalence()
+    
+    # Phase 3: Advanced Features
+    add_data_management()
+    test_advanced_features()
+    
+    # Phase 4: Deprecation
+    deprecate_old_scripts()
+    complete_migration()
+```
+
+### Ignoring Backwards Compatibility
+```python
+# ❌ BAD - Breaking existing interfaces
+class PlayerStats:
+    def __init__(self, pfr_id: str, name: str, season: int):
+        # Changed parameter name - breaks existing code!
+        self.pfr_id = pfr_id  # Was 'player_id'
+        self.name = name      # Was 'player_name'
+        self.season = season
+    
+    def get_stats(self) -> Dict[str, Any]:
+        # Changed return format - breaks existing code!
+        return {
+            'pfr_id': self.pfr_id,    # Was 'player_id'
+            'name': self.name,        # Was 'player_name'
+            'season': self.season
+        }
+
+# ✅ GOOD - Maintaining backwards compatibility
+class PlayerStats:
+    def __init__(self, pfr_id: str, name: str, season: int, 
+                 player_id: str = None, player_name: str = None):
+        self.pfr_id = pfr_id
+        self.name = name
+        self.season = season
+        
+        # Backwards compatibility
+        if player_id:
+            warnings.warn("player_id is deprecated, use pfr_id", DeprecationWarning)
+            self.pfr_id = player_id
+        if player_name:
+            warnings.warn("player_name is deprecated, use name", DeprecationWarning)
+            self.name = player_name
+    
+    def get_stats(self) -> Dict[str, Any]:
+        return {
+            'pfr_id': self.pfr_id,
+            'name': self.name,
+            'season': self.season,
+            # Backwards compatibility
+            'player_id': self.pfr_id,
+            'player_name': self.name
+        }
+```
+
+## Error Handling Anti-Patterns
+
+### Silent Failures
+```python
+# ❌ BAD - Silent failure hides problems
+def scrape_player_stats(player_name: str):
+    try:
+        url = build_url(player_name)
+        response = requests.get(url)
+        stats = parse_response(response)
+        return stats
+    except Exception:
+        return None  # Silent failure - user doesn't know what went wrong!
+
+# ✅ GOOD - Explicit error handling
+def scrape_player_stats(player_name: str) -> PlayerStats:
+    try:
+        url = build_url(player_name)
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        stats = parse_response(response)
+        return stats
+    except requests.exceptions.Timeout as e:
+        logger.error(f"Timeout scraping {player_name}: {e}")
+        raise ScrapingError(f"Request timeout for {player_name}")
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"HTTP error scraping {player_name}: {e}")
+        raise ScrapingError(f"HTTP error {e.response.status_code} for {player_name}")
+    except ParseError as e:
+        logger.error(f"Parse error for {player_name}: {e}")
+        raise ScrapingError(f"Could not parse data for {player_name}")
+```
+
+### Catching Too Much
+```python
+# ❌ BAD - Catching all exceptions
+def process_data():
+    try:
+        # Complex operation
+        result = complex_operation()
+        return result
+    except Exception as e:
+        # This catches everything - even programming errors!
+        logger.error(f"Error: {e}")
+        return None
+
+# ✅ GOOD - Catching specific exceptions
+def process_data():
+    try:
+        result = complex_operation()
+        return result
+    except ValueError as e:
+        logger.error(f"Invalid data: {e}")
+        raise DataValidationError(f"Invalid data: {e}")
+    except NetworkError as e:
+        logger.error(f"Network error: {e}")
+        raise ScrapingError(f"Network error: {e}")
+    except Exception as e:
+        # Only catch unexpected exceptions after handling known ones
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        raise
+```
+
+## Performance Anti-Patterns
+
+### Loading Everything into Memory
+```python
+# ❌ BAD - Loading all data into memory
+def process_all_players():
+    all_players = []
+    for player_url in get_all_player_urls():  # 1000+ URLs
+        stats = scrape_player_stats(player_url)
+        all_players.append(stats)  # Memory grows unbounded
+    
+    # Process all at once - memory explosion!
+    processed_data = []
+    for player in all_players:
+        processed = complex_processing(player)
+        processed_data.append(processed)
+    
+    return processed_data
+
+# ✅ GOOD - Streaming processing
+def process_all_players():
+    """Process players one at a time to avoid memory issues."""
+    for player_url in get_all_player_urls():
+        try:
+            stats = scrape_player_stats(player_url)
+            processed = complex_processing(stats)
+            save_to_database(processed)  # Save immediately
+            yield processed  # Yield instead of storing
+        except Exception as e:
+            logger.error(f"Failed to process {player_url}: {e}")
+            continue
+```
+
+### N+1 Query Problems
+```python
+# ❌ BAD - N+1 queries
+def get_players_with_stats(season: int):
+    players = db.execute("SELECT * FROM players").fetchall()
+    
+    result = []
+    for player in players:  # N queries
+        stats = db.execute(
+            "SELECT * FROM qb_stats WHERE player_id = ? AND season = ?",
+            (player['id'], season)
+        ).fetchone()
+        result.append({'player': player, 'stats': stats})
+    
+    return result
+
+# ✅ GOOD - Single query with JOIN
+def get_players_with_stats(season: int):
+    query = """
+    SELECT p.*, s.*
+    FROM players p
+    LEFT JOIN qb_stats s ON p.id = s.player_id
+    WHERE s.season = ? OR s.season IS NULL
+    """
+    return db.execute(query, (season,)).fetchall()
+```
+
+## Security Anti-Patterns
+
+### SQL Injection Vulnerabilities
+```python
+# ❌ BAD - SQL injection vulnerability
+def get_player_stats(player_name: str, season: int):
+    query = f"SELECT * FROM players WHERE name = '{player_name}' AND season = {season}"
+    return db.execute(query).fetchone()  # Vulnerable to injection!
+
+# ✅ GOOD - Parameterized queries
+def get_player_stats(player_name: str, season: int):
+    query = "SELECT * FROM players WHERE name = ? AND season = ?"
+    return db.execute(query, (player_name, season)).fetchone()
+```
+
+### Hardcoded Credentials
+```python
+# ❌ BAD - Hardcoded credentials
+class DatabaseConnection:
+    def __init__(self):
+        self.connection = psycopg2.connect(
+            host="localhost",
+            database="nfl_data",
+            user="admin",
+            password="password123"  # Hardcoded password - BAD!
+        )
+
+# ✅ GOOD - Environment variables
+class DatabaseConnection:
+    def __init__(self):
+        self.connection = psycopg2.connect(
+            host=os.getenv('DB_HOST', 'localhost'),
+            database=os.getenv('DB_NAME', 'nfl_data'),
+            user=os.getenv('DB_USER'),
+            password=os.getenv('DB_PASSWORD')
+        )
+```
+
+## Testing Anti-Patterns
+
+### Testing Implementation Details
+```python
+# ❌ BAD - Testing internal implementation
+def test_scraper_internals():
+    scraper = CoreScraper()
+    
+    # Testing internal methods - brittle!
+    assert scraper._build_url("Joe Burrow") == "https://..."
+    assert scraper._parse_html("<html>...") == {...}
+    assert scraper._validate_response(mock_response) == True
+
+# ✅ GOOD - Testing public interface
+def test_scraper_functionality():
+    scraper = CoreScraper()
+    
+    with patch('requests.Session.get') as mock_get:
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.text = get_test_html()
+        
+        # Test public interface
+        result = scraper.scrape_player_stats("Joe Burrow", 2024)
+        
+        assert isinstance(result, PlayerStats)
+        assert result.player_name == "Joe Burrow"
+        assert result.season == 2024
+```
+
+### Mocking Everything
+```python
+# ❌ BAD - Over-mocking
+def test_database_operations():
+    with patch('psycopg2.connect') as mock_connect:
+        with patch('psycopg2.cursor') as mock_cursor:
+            with patch('psycopg2.execute') as mock_execute:
+                with patch('psycopg2.fetchone') as mock_fetchone:
+                    # So many mocks that test becomes meaningless
+                    db = DatabaseManager()
+                    result = db.get_player_stats("test", 2024)
+                    assert result is not None
+
+# ✅ GOOD - Test with real database (or minimal mocking)
+def test_database_operations(temp_db):
+    # Use real database for integration testing
+    player_stats = PlayerStats(
+        pfr_id="test01",
+        player_name="Test Player",
+        season=2024,
+        completions=10,
+        attempts=20
+    )
+    
+    temp_db.save_player_stats(player_stats)
+    result = temp_db.get_player_stats("test01", 2024)
+    
+    assert result.player_name == "Test Player"
+    assert result.completions == 10
+```
+
+## Common Warning Signs
+
+### Code Smells to Watch For
+- **Files longer than 500 lines** - probably doing too much
+- **Functions with more than 5 parameters** - consider parameter objects
+- **Deep nesting (> 3 levels)** - extract functions or use early returns
+- **Duplicate code blocks** - extract common functionality
+- **Long parameter lists** - use configuration objects
+- **Magic numbers** - use named constants
+- **Commented-out code** - remove it, that's what version control is for
+
+### Architecture Smells
+- **Circular imports** - redesign module dependencies
+- **God objects** - split into focused classes
+- **Tight coupling** - use dependency injection
+- **Hard-coded paths** - use configuration
+- **Mixed responsibilities** - separate concerns
+- **No error handling** - add comprehensive error handling
+- **No logging** - add structured logging
+
+### Process Smells
+- **No tests** - add comprehensive test coverage
+- **No documentation** - document APIs and workflows
+- **No code reviews** - implement review process
+- **No continuous integration** - set up automated testing
+- **No performance monitoring** - add performance tracking
+- **No security considerations** - implement security best practices
+
+By avoiding these anti-patterns, your code will be more maintainable, reliable, and easier to understand throughout the migration process and beyond.
+description:
+globs:
+alwaysApply: false
+---

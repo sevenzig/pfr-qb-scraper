@@ -1,0 +1,379 @@
+# Rule Conflict Resolution Guide
+*Resolving conflicts and edge cases in the development rules*
+
+## Testing Rule Conflicts
+
+### Mock Usage Resolution
+**Conflict**: Rule says "NEVER mock what you don't own" vs "test with mock HTTP responses"
+
+**Resolution**:
+```python
+# ✅ CORRECT - Mock at the boundary you control
+class TestScraper:
+    def test_scrape_player_with_mock_response(self):
+        # Mock the HTTP response (boundary we control)
+        with patch('requests.Session.get') as mock_get:
+            mock_get.return_value = self.create_mock_response()
+            result = scraper.scrape_player_stats("Joe Burrow", 2024)
+        
+        assert result.player_name == "Joe Burrow"
+    
+    def test_scrape_player_with_real_http_library(self):
+        # Use requests-mock for more realistic testing
+        with requests_mock.Mocker() as m:
+            m.get('https://pro-football-reference.com/...', text=self.get_test_html())
+            result = scraper.scrape_player_stats("Joe Burrow", 2024)
+
+# ❌ WRONG - Don't mock internal library methods
+class TestScraperWrong:
+    def test_scrape_player_wrong(self):
+        # Don't mock internal requests internals
+        with patch('requests.adapters.HTTPAdapter.send'):
+            # Too deep into requests internals
+            pass
+```
+
+**Guideline**: Mock at your application boundaries, not deep into external libraries.
+
+### Performance vs Test Speed Resolution
+**Conflict**: "minimum 2 seconds between requests" vs "tests must be fast (< 1 second)"
+
+**Resolution**:
+```python
+# ✅ CORRECT - Different rate limits for testing
+class RateLimitConfig:
+    def __init__(self, environment: str = "production"):
+        if environment == "testing":
+            self.delay = 0.01  # Fast for tests
+        elif environment == "development":
+            self.delay = 0.5   # Moderate for development
+        else:
+            self.delay = 2.0   # Respectful for production
+
+# ✅ CORRECT - Dependency injection for testability
+class CoreScraper:
+    def __init__(self, rate_limiter: RateLimiter):
+        self.rate_limiter = rate_limiter
+    
+    def scrape_player_stats(self, player_name: str, season: int):
+        self.rate_limiter.wait()  # Configurable delay
+        # ... scraping logic
+
+# Test configuration
+@pytest.fixture
+def test_scraper():
+    test_rate_limiter = RateLimiter(delay=0.01)  # Fast for tests
+    return CoreScraper(test_rate_limiter)
+```
+
+## Migration Phase Flexibility
+
+### Code Quality vs Migration Speed
+**Conflict**: Strict quality requirements vs rapid migration needs
+
+**Resolution by Phase**:
+
+#### Phase 1 (Foundation) - Relaxed Standards
+```python
+# ✅ ACCEPTABLE in Phase 1 - Bridge code for migration
+class LegacyBridge:
+    """Temporary bridge code - will be cleaned up in Phase 3."""
+    
+    def __init__(self):
+        # TODO: Replace with proper dependency injection in Phase 2
+        self.legacy_scraper = EnhancedQBScraper()
+        self.new_scraper = None
+    
+    def scrape_with_fallback(self, player_name: str, season: int):
+        """Use new scraper with fallback to legacy."""
+        try:
+            if self.new_scraper:
+                return self.new_scraper.scrape_player_stats(player_name, season)
+        except Exception:
+            # Fallback to legacy during migration
+            return self.legacy_scraper.scrape_player(player_name, season)
+```
+
+#### Phase 2 (Core) - Moderate Standards
+```python
+# ✅ ACCEPTABLE in Phase 2 - Functional equivalence focus
+class CoreScraper:
+    def scrape_player_stats(self, player_name: str, season: int) -> PlayerStats:
+        """Scrape player stats - equivalent to legacy enhanced_qb_scraper."""
+        # Focus on functional equivalence first
+        # TODO: Add comprehensive error handling in Phase 3
+        # TODO: Add full type hints in Phase 3
+        # TODO: Add comprehensive tests in Phase 3
+        
+        response = self._make_request(player_name)
+        return self._parse_response(response, season)
+```
+
+#### Phase 3 (Polish) - Full Standards
+```python
+# ✅ REQUIRED in Phase 3 - Full compliance
+class CoreScraper:
+    """Professional scraper with full error handling and validation."""
+    
+    def __init__(self, config: ScrapingConfig, rate_limiter: RateLimiter):
+        self.config = config
+        self.rate_limiter = rate_limiter
+    
+    def scrape_player_stats(
+        self, 
+        player_name: str, 
+        season: int
+    ) -> PlayerStats:
+        """
+        Scrape player statistics with comprehensive error handling.
+        
+        Args:
+            player_name: Full player name (e.g., "Joe Burrow")
+            season: NFL season year (1950-2024)
+            
+        Returns:
+            PlayerStats: Complete player statistics
+            
+        Raises:
+            ValidationError: If inputs are invalid
+            ScrapingError: If scraping fails
+            
+        Example:
+            >>> scraper = CoreScraper(config, rate_limiter)
+            >>> stats = scraper.scrape_player_stats("Joe Burrow", 2024)
+            >>> assert stats.player_name == "Joe Burrow"
+        """
+        # Full implementation with all standards
+```
+
+### Test Coverage Flexibility During Migration
+**Conflict**: "85% coverage required" vs migration realities
+
+**Resolution**:
+```python
+# Coverage requirements by phase
+PHASE_COVERAGE_REQUIREMENTS = {
+    "phase1": {
+        "minimum_coverage": 60,  # Relaxed for foundation
+        "new_code_coverage": 80,  # New code should be well tested
+        "legacy_bridge_coverage": 40  # Bridge code can be lower
+    },
+    "phase2": {
+        "minimum_coverage": 70,  # Moderate for core migration
+        "new_code_coverage": 85,
+        "core_scraper_coverage": 90  # Core functionality must be well tested
+    },
+    "phase3": {
+        "minimum_coverage": 80,  # Higher for advanced features
+        "new_code_coverage": 90,
+        "integration_coverage": 85
+    },
+    "phase4": {
+        "minimum_coverage": 85,  # Full requirements for production
+        "all_code_coverage": 85,
+        "legacy_code_removed": True
+    }
+}
+```
+
+## Architecture Rule Conflicts
+
+### Backwards Compatibility vs Clean Architecture
+**Conflict**: "Maintain old interfaces" vs "Use proper module structure"
+
+**Resolution**:
+```python
+# ✅ CORRECT - Facade pattern for backwards compatibility
+# src/legacy/compatibility.py
+class LegacyCompatibilityFacade:
+    """Maintain old interfaces while using new architecture."""
+    
+    def __init__(self):
+        # Use new architecture internally
+        from src.core.scraper import CoreScraper
+        from src.config.settings import Settings
+        
+        settings = Settings()
+        self.scraper = CoreScraper(settings)
+    
+    # Old interface for backwards compatibility
+    def scrape_player(self, player_name: str, season: int) -> dict:
+        """Legacy interface - returns dict instead of PlayerStats."""
+        stats = self.scraper.scrape_player_stats(player_name, season)
+        return stats.to_legacy_dict()  # Convert to old format
+
+# scripts/enhanced_qb_scraper.py (Phase 1-3)
+# Keep old script working but delegate to new system
+import warnings
+from src.legacy.compatibility import LegacyCompatibilityFacade
+
+def main():
+    warnings.warn(
+        "enhanced_qb_scraper.py is deprecated. Use 'pfr-scraper scrape players' instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
+    # Delegate to new system
+    facade = LegacyCompatibilityFacade()
+    # ... rest of old script logic using facade
+```
+
+### Configuration Centralization vs Legacy Support
+**Conflict**: "All config centralized" vs "Old scripts need their configs"
+
+**Resolution**:
+```python
+# ✅ CORRECT - Configuration adapter pattern
+class ConfigurationAdapter:
+    """Adapt between old and new configuration systems."""
+    
+    def __init__(self):
+        self.new_config = Settings()  # New centralized config
+    
+    def get_legacy_config(self, script_name: str) -> dict:
+        """Convert new config to legacy format for old scripts."""
+        legacy_configs = {
+            'enhanced_qb_scraper': {
+                'rate_limit': self.new_config.scraping.rate_limit,
+                'timeout': self.new_config.scraping.timeout,
+                'db_url': self.new_config.database.url
+            }
+        }
+        return legacy_configs.get(script_name, {})
+    
+    def load_legacy_config_file(self, file_path: str):
+        """Load old config file and merge into new system."""
+        # Load old config and update new system
+        old_config = self._load_old_config(file_path)
+        self._merge_into_new_config(old_config)
+```
+
+## Documentation vs Development Speed
+
+### Comprehensive Docs vs Rapid Iteration
+**Conflict**: "Never commit without comprehensive docstrings" vs migration speed
+
+**Resolution**:
+```python
+# ✅ ACCEPTABLE during migration phases
+class CoreScraper:
+    def scrape_player_stats(self, player_name: str, season: int) -> PlayerStats:
+        # MIGRATION TODO: Add comprehensive docstring in Phase 3
+        # Currently: Equivalent to enhanced_qb_scraper.scrape_player()
+        # See: docs/migration/core-scraper-equivalence.md
+        
+        # Implementation...
+        pass
+
+# ✅ REQUIRED for external APIs
+class PublicAPI:
+    def scrape_player_stats(self, player_name: str, season: int) -> PlayerStats:
+        """
+        Scrape player statistics from Pro Football Reference.
+        
+        This is a public API that external code may depend on.
+        Full documentation is required regardless of migration phase.
+        
+        Args:
+            player_name: Full player name
+            season: NFL season year
+            
+        Returns:
+            PlayerStats: Player statistics object
+        """
+        pass
+```
+
+## Error Handling Flexibility
+
+### Fail Fast vs Migration Robustness
+**Conflict**: "Fail fast with clear errors" vs "Keep migration running"
+
+**Resolution**:
+```python
+# ✅ CORRECT - Different error handling by context
+class MigrationErrorHandler:
+    def __init__(self, migration_phase: str, strict_mode: bool = False):
+        self.migration_phase = migration_phase
+        self.strict_mode = strict_mode
+    
+    def handle_scraping_error(self, error: Exception, player_name: str):
+        if self.strict_mode or self.migration_phase == "phase4":
+            # Production mode - fail fast
+            raise ScrapingError(f"Failed to scrape {player_name}: {error}")
+        else:
+            # Migration mode - log and continue
+            logger.error(f"Scraping failed for {player_name}: {error}")
+            logger.info("Continuing migration despite error...")
+            return None
+
+# Usage in different contexts
+# Development/Testing - strict mode
+scraper = CoreScraper(error_handler=MigrationErrorHandler("phase2", strict_mode=True))
+
+# Migration script - resilient mode
+scraper = CoreScraper(error_handler=MigrationErrorHandler("phase2", strict_mode=False))
+```
+
+## Performance Standards Flexibility
+
+### Optimization vs Migration Timeline
+**Conflict**: "No performance regressions" vs migration complexity
+
+**Resolution**:
+```python
+# Performance tolerance by migration phase
+PERFORMANCE_TOLERANCES = {
+    "phase1": {
+        "regression_tolerance": 20,  # 20% slower acceptable for foundation
+        "memory_tolerance": 50,      # 50% more memory acceptable
+        "reason": "Building foundation, performance comes later"
+    },
+    "phase2": {
+        "regression_tolerance": 10,  # 10% slower acceptable for core migration
+        "memory_tolerance": 25,      # 25% more memory acceptable
+        "reason": "Focus on functional equivalence"
+    },
+    "phase3": {
+        "regression_tolerance": 5,   # 5% slower acceptable for advanced features
+        "memory_tolerance": 10,      # 10% more memory acceptable
+        "reason": "Adding advanced features"
+    },
+    "phase4": {
+        "regression_tolerance": 0,   # No regressions acceptable in production
+        "memory_tolerance": 0,       # No memory increases acceptable
+        "reason": "Production quality required"
+    }
+}
+```
+
+## Rule Application Guidelines
+
+### When to Bend Rules
+1. **During active migration phases** (1-3) - Some flexibility allowed
+2. **For bridge/compatibility code** - Temporary code can have relaxed standards
+3. **For rapid prototyping** - Initial implementations can defer some requirements
+4. **Emergency fixes** - Critical bugs can bypass some process requirements
+
+### When Rules are Absolute
+1. **Security requirements** - Never compromise security
+2. **Backwards compatibility** - Never break existing functionality (Phases 1-3)
+3. **Data integrity** - Never compromise database consistency
+4. **External APIs** - Public interfaces must maintain full standards
+5. **Phase 4** - All rules apply strictly in production phase
+
+### Rule Priority Hierarchy
+1. **Security** (highest priority)
+2. **Data integrity**
+3. **Backwards compatibility**
+4. **Functional correctness**
+5. **Performance**
+6. **Code quality**
+7. **Documentation** (lowest priority during migration)
+
+This conflict resolution guide ensures that the rules remain practical and achievable throughout the migration process while maintaining the integrity of the final system.
+description:
+globs:
+alwaysApply: false
+---

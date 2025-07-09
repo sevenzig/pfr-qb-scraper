@@ -1,0 +1,162 @@
+# Migration Process Guardrails
+*Ensure safe, structured migration from scripts to CLI*
+
+## Phase Compliance Rules
+
+### Sequential Phase Execution
+- **NEVER skip migration phases** - Follow Foundation → Core → Data → Polish sequence
+- **ALWAYS maintain backwards compatibility** until Phase 4 deprecation
+- **NEVER break existing scripts** during Phases 1-3
+- **ALWAYS test each phase deliverable** before proceeding to next phase
+- **NEVER merge code** without passing the phase-specific success criteria
+
+### Phase-Specific Requirements
+
+#### Phase 1: Foundation
+- **CLI skeleton must be intuitive** - Users understand structure from help
+- **Command routing must be extensible** - Easy to add new commands
+- **Configuration system must be centralized** - Single source of truth
+- **Zero disruption** - All existing scripts continue working
+
+#### Phase 2: Core Migration
+- **Functional equivalence** - New scraper produces same data as best old scraper
+- **Performance parity** - No more than 5% performance regression
+- **Enhanced error handling** - Better messages than old scripts
+- **Working CLI commands** - Users can perform basic operations
+
+#### Phase 3: Data Management
+- **Multi-team aggregation** - Handle 2TM/3TM players correctly
+- **Data quality validation** - Catch and report inconsistencies
+- **Session management** - Resume failed operations
+- **Advanced features work** - Power users can handle complex scenarios
+
+#### Phase 4: Polish & Deprecation
+- **Production quality** - 85%+ test coverage, comprehensive docs
+- **User migration success** - Existing users transition smoothly
+- **Legacy deprecation** - Old scripts moved to legacy/ with warnings
+- **Performance optimization** - System performs as well or better than old scripts
+
+## Architecture Compliance
+
+### Module Structure Requirements
+- **ALL new code** must go in proper module structure:
+  - `src/cli/` - CLI command handlers only
+  - `src/core/` - Pure business logic
+  - `src/operations/` - High-level workflow orchestration
+- **NEVER put business logic** in CLI command handlers
+- **ALWAYS use dependency injection** patterns for testability
+- **NEVER create circular dependencies** between modules
+- **ALWAYS follow single responsibility** principle for classes and functions
+
+### Migration-Specific Patterns
+- **NEW CLI commands** must inherit from `BaseCommand` class
+- **ALL scrapers** must extend the unified `CoreScraper` class
+- **NEVER duplicate existing functionality** - consolidate instead
+- **ALWAYS use the new configuration system** (`src/config/settings.py`)
+- **NEVER hardcode values** - use configuration management
+
+## Code Consolidation Rules
+
+### When Combining Scripts
+- **ALWAYS preserve all functionality** - Nothing gets lost
+- **NEVER delete old scripts** until new CLI commands are proven equivalent
+- **ALWAYS create mapping document** showing old script → new command
+- **ALL consolidated code** must maintain or improve performance
+- **NEVER introduce regressions** during consolidation
+
+### Legacy Support Strategy
+- **ALL legacy scripts** must continue working until Phase 4
+- **NEVER remove legacy functionality** without replacement
+- **ALWAYS provide migration path** for existing users
+- **ALL breaking changes** must be clearly documented
+- **NEVER surprise users** with sudden workflow changes
+
+## Validation Requirements
+
+### Phase Gate Reviews
+Each phase must pass:
+- [ ] **Functional validation** - New code works as expected
+- [ ] **Performance validation** - No significant regressions
+- [ ] **Compatibility validation** - Existing workflows still work
+- [ ] **Quality validation** - Code meets all standards
+- [ ] **Documentation validation** - Changes are properly documented
+
+### Equivalence Testing
+- **NEVER assume equivalence** - always verify with known data
+- **ALWAYS test with edge cases** (multi-team players, missing data)
+- **ALL performance claims** must be verified with benchmarks
+- **NEVER deploy without comprehensive validation**
+
+## Migration Safety Nets
+
+### Rollback Preparation
+- **ALWAYS backup database** before schema changes
+- **NEVER modify existing data** without validation scripts
+- **ALWAYS test migrations** on copy of production data
+- **KEEP old scripts functional** as emergency fallback
+
+### Risk Mitigation
+- **Incremental changes only** - No big-bang migrations
+- **Frequent validation** - Test after each significant change
+- **User communication** - Keep users informed of progress
+- **Monitoring during transition** - Watch for issues
+
+## Success Metrics
+
+### Phase 1 Success
+- CLI help system is intuitive
+- Command routing handles edge cases
+- Configuration system is functional
+- Zero impact on existing workflows
+
+### Phase 2 Success
+- Basic scraping works through new CLI
+- Data quality is equivalent or better
+- Users can perform real work with new system
+- Performance is acceptable
+
+### Phase 3 Success
+- Multi-team players handled correctly
+- Data validation catches issues
+- Complex scenarios work smoothly
+- Long operations are resumable
+
+### Phase 4 Success
+- All tests pass consistently
+- Users successfully migrate
+- Documentation is complete
+- System is maintainable
+
+## Common Migration Pitfalls
+
+### Avoid These Mistakes
+- **Breaking existing functionality** during migration
+- **Big-bang changes** - always incremental
+- **Skipping validation steps** - test everything
+- **Feature creep** - focus on migration, not new features
+- **Ignoring backwards compatibility** - maintain until Phase 4
+
+### Warning Signs
+- Users reporting broken workflows
+- Performance degradation > 5%
+- Test coverage decreasing
+- Documentation falling behind
+- User resistance to new system
+
+## Communication Strategy
+
+### User Updates
+- **Weekly progress reports** - Keep users informed
+- **Early demos** - Show progress and get feedback
+- **Migration guides** - Help users transition
+- **Support channels** - Help with issues
+
+### Developer Communication
+- **Architecture decisions** - Document rationale
+- **API changes** - Communicate impacts
+- **Testing procedures** - Share validation methods
+- **Quality standards** - Ensure consistency
+description:
+globs:
+alwaysApply: false
+---

@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
 """
-Utility functions for NFL QB Data Scraping System
-Helper functions for data manipulation, validation, cleaning, and type conversion
+Data utility functions for NFL QB scraping system
+Handles data validation, conversion, and normalization
 """
 
 import re
-import math
-from typing import Optional, Union, Any, List, Dict
-from datetime import datetime, date
 import logging
+from typing import Union, Optional, Dict, Any
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-def safe_int(value: Any, default: int = 0) -> int:
+def safe_int(value: Union[str, int, float, None], default: int = 0) -> int:
     """
-    Safely convert value to integer with error handling
+    Safely convert value to integer
     
     Args:
         value: Value to convert
@@ -23,31 +22,19 @@ def safe_int(value: Any, default: int = 0) -> int:
     Returns:
         Integer value or default
     """
-    if value is None:
+    if value is None or value == '':
         return default
-    
-    if isinstance(value, int):
-        return value
-    
-    if isinstance(value, float):
-        return int(value)
-    
-    if isinstance(value, str):
-        # Remove commas and other non-numeric characters
-        cleaned = re.sub(r'[^\d.-]', '', value.strip())
-        if cleaned:
-            try:
-                return int(float(cleaned))
-            except (ValueError, TypeError):
-                logger.warning(f"Could not convert '{value}' to int, using default {default}")
-                return default
-    
-    logger.warning(f"Could not convert {type(value).__name__} '{value}' to int, using default {default}")
-    return default
+    try:
+        # Handle percentage strings
+        if isinstance(value, str) and value.endswith('%'):
+            return int(float(value[:-1]))
+        return int(float(str(value)))
+    except (ValueError, TypeError):
+        return default
 
-def safe_float(value: Any, default: float = 0.0) -> float:
+def safe_float(value: Union[str, int, float, None], default: float = 0.0) -> float:
     """
-    Safely convert value to float with error handling
+    Safely convert value to float
     
     Args:
         value: Value to convert
@@ -56,57 +43,41 @@ def safe_float(value: Any, default: float = 0.0) -> float:
     Returns:
         Float value or default
     """
-    if value is None:
+    if value is None or value == '':
         return default
-    
-    if isinstance(value, (int, float)):
-        return float(value)
-    
-    if isinstance(value, str):
-        # Remove commas and percentage signs
-        cleaned = re.sub(r'[^\d.-]', '', value.strip())
-        if cleaned:
-            try:
-                return float(cleaned)
-            except (ValueError, TypeError):
-                logger.warning(f"Could not convert '{value}' to float, using default {default}")
-                return default
-    
-    logger.warning(f"Could not convert {type(value).__name__} '{value}' to float, using default {default}")
-    return default
+    try:
+        # Handle percentage strings
+        if isinstance(value, str) and value.endswith('%'):
+            return float(value[:-1])
+        return float(str(value))
+    except (ValueError, TypeError):
+        return default
 
-def safe_percentage(value: Any, default: float = 0.0) -> float:
+def safe_percentage(value: Union[str, int, float, None], default: float = 0.0) -> float:
     """
-    Safely convert percentage value to float (0-100 scale)
+    Safely convert percentage value to float
     
     Args:
-        value: Percentage value (string with % or float)
+        value: Percentage value to convert (may include % symbol)
         default: Default value if conversion fails
         
     Returns:
-        Float percentage (0-100 scale)
+        Float percentage value or default
     """
-    if value is None:
+    if value is None or value == '':
         return default
-    
-    if isinstance(value, (int, float)):
+    try:
+        if isinstance(value, str):
+            # Remove % symbol if present
+            clean_value = value.replace('%', '').strip()
+            return float(clean_value)
         return float(value)
-    
-    if isinstance(value, str):
-        # Remove % sign and convert
-        cleaned = value.strip().replace('%', '')
-        try:
-            return float(cleaned)
-        except (ValueError, TypeError):
-            logger.warning(f"Could not convert percentage '{value}' to float, using default {default}")
-            return default
-    
-    logger.warning(f"Could not convert {type(value).__name__} '{value}' to percentage, using default {default}")
-    return default
+    except (ValueError, TypeError):
+        return default
 
 def clean_player_name(name: str) -> str:
     """
-    Clean and standardize player name
+    Clean and normalize player name
     
     Args:
         name: Raw player name
@@ -117,12 +88,13 @@ def clean_player_name(name: str) -> str:
     if not name:
         return ""
     
-    # Remove extra whitespace and special characters
-    cleaned = re.sub(r'\s+', ' ', name.strip())
-    # Remove asterisks and other special markers
-    cleaned = re.sub(r'[*†‡]', '', cleaned)
+    # Remove extra whitespace
+    name = ' '.join(name.split())
     
-    return cleaned
+    # Handle common name formatting issues
+    name = name.replace('*', '').replace('+', '')  # Remove PFR indicators
+    
+    return name.strip()
 
 def extract_pfr_id(player_url: str) -> Optional[str]:
     """
@@ -138,7 +110,6 @@ def extract_pfr_id(player_url: str) -> Optional[str]:
         return None
     
     # Extract ID from URL pattern: /players/B/BurrJo01.htm
-    import re
     match = re.search(r'/players/[A-Z]/([A-Za-z0-9]+)\.htm', player_url)
     if match:
         return match.group(1).lower()
@@ -170,492 +141,174 @@ def generate_player_id(player_name: str, player_url: Optional[str] = None) -> st
     cleaned = ''.join(c.lower() for c in player_name if c.isalnum())
     return cleaned[:20]  # Limit to 20 characters
 
-def calculate_passer_rating(
-    completions: int,
-    attempts: int,
-    yards: int,
-    touchdowns: int,
-    interceptions: int
-) -> float:
+def normalize_pfr_team_code(team_code: str) -> str:
     """
-    Calculate NFL passer rating manually
+    Normalize team codes to match Pro Football Reference standards
     
     Args:
-        completions: Number of completions
-        attempts: Number of attempts
-        yards: Passing yards
-        touchdowns: Passing touchdowns
-        interceptions: Interceptions thrown
+        team_code: Raw team code from PFR
         
     Returns:
-        NFL passer rating (0-158.3 scale)
-    """
-    if attempts == 0:
-        return 0.0
-    
-    # NFL passer rating formula
-    a = max(0, min(2.375, (completions / attempts - 0.3) * 5))
-    b = max(0, min(2.375, (yards / attempts - 3) * 0.25))
-    c = max(0, min(2.375, (touchdowns / attempts) * 20))
-    d = max(0, min(2.375, 2.375 - (interceptions / attempts) * 25))
-    
-    return round(((a + b + c + d) / 6) * 100, 1)
-
-def calculate_completion_percentage(completions: int, attempts: int) -> Optional[float]:
-    """
-    Calculate completion percentage
-    
-    Args:
-        completions: Number of completions
-        attempts: Number of attempts
-        
-    Returns:
-        Completion percentage or None if no attempts
-    """
-    if attempts == 0:
-        return None
-    
-    return round((completions / attempts) * 100, 1)
-
-def calculate_yards_per_attempt(yards: int, attempts: int) -> Optional[float]:
-    """
-    Calculate yards per attempt
-    
-    Args:
-        yards: Passing yards
-        attempts: Number of attempts
-        
-    Returns:
-        Yards per attempt or None if no attempts
-    """
-    if attempts == 0:
-        return None
-    
-    return round(yards / attempts, 2)
-
-def calculate_touchdown_rate(touchdowns: int, attempts: int) -> Optional[float]:
-    """
-    Calculate touchdown rate (touchdowns per attempt as percentage)
-    
-    Args:
-        touchdowns: Number of touchdowns
-        attempts: Number of attempts
-        
-    Returns:
-        Touchdown rate percentage or None if no attempts
-    """
-    if attempts == 0:
-        return None
-    
-    return round((touchdowns / attempts) * 100, 2)
-
-def calculate_interception_rate(interceptions: int, attempts: int) -> Optional[float]:
-    """
-    Calculate interception rate (interceptions per attempt as percentage)
-    
-    Args:
-        interceptions: Number of interceptions
-        attempts: Number of attempts
-        
-    Returns:
-        Interception rate percentage or None if no attempts
-    """
-    if attempts == 0:
-        return None
-    
-    return round((interceptions / attempts) * 100, 2)
-
-def calculate_qb_efficiency_score(
-    completion_pct: float,
-    yards_per_attempt: float,
-    td_rate: float,
-    int_rate: float,
-    rating: float
-) -> float:
-    """
-    Calculate custom QB efficiency score
-    
-    Args:
-        completion_pct: Completion percentage
-        yards_per_attempt: Yards per attempt
-        td_rate: Touchdown rate percentage
-        int_rate: Interception rate percentage
-        rating: NFL passer rating
-        
-    Returns:
-        Efficiency score (0-100 scale)
-    """
-    # Weighted efficiency score
-    completion_weight = 0.2
-    yards_weight = 0.25
-    td_weight = 0.25
-    int_weight = 0.15
-    rating_weight = 0.15
-    
-    completion_score = completion_pct * completion_weight
-    yards_score = yards_per_attempt * 10 * yards_weight
-    td_score = td_rate * td_weight
-    int_score = max(0, (10 - int_rate)) * 5 * int_weight
-    rating_score = (rating / 158.3) * 100 * rating_weight
-    
-    return round(completion_score + yards_score + td_score + int_score + rating_score, 2)
-
-def validate_statistical_consistency(
-    completions: int,
-    attempts: int,
-    completion_pct: Optional[float],
-    yards: int,
-    touchdowns: int,
-    interceptions: int,
-    rating: Optional[float]
-) -> List[str]:
-    """
-    Validate statistical consistency between related fields
-    
-    Args:
-        completions: Number of completions
-        attempts: Number of attempts
-        completion_pct: Completion percentage
-        yards: Passing yards
-        touchdowns: Passing touchdowns
-        interceptions: Interceptions
-        rating: NFL passer rating
-        
-    Returns:
-        List of validation errors
-    """
-    errors = []
-    
-    # Check completion percentage
-    if attempts > 0 and completion_pct is not None:
-        calculated_pct = (completions / attempts) * 100
-        if abs(completion_pct - calculated_pct) > 0.1:
-            errors.append(f"Completion percentage mismatch: {completion_pct} vs calculated {calculated_pct:.1f}")
-    
-    # Check passer rating
-    if attempts > 0 and rating is not None:
-        calculated_rating = calculate_passer_rating(completions, attempts, yards, touchdowns, interceptions)
-        if abs(rating - calculated_rating) > 0.1:
-            errors.append(f"Passer rating mismatch: {rating} vs calculated {calculated_rating}")
-    
-    # Check logical consistency
-    if completions > attempts:
-        errors.append("Completions cannot exceed attempts")
-    
-    if yards < 0:
-        errors.append("Passing yards cannot be negative")
-    
-    if touchdowns < 0:
-        errors.append("Touchdowns cannot be negative")
-    
-    if interceptions < 0:
-        errors.append("Interceptions cannot be negative")
-    
-    return errors
-
-def format_percentage(value: Union[float, str, None], decimals: int = 1) -> str:
-    """
-    Format value as percentage string
-    
-    Args:
-        value: Value to format
-        decimals: Number of decimal places
-        
-    Returns:
-        Formatted percentage string
-    """
-    if value is None:
-        return "0.0%"
-    
-    try:
-        num = float(value)
-        return f"{num:.{decimals}f}%"
-    except (ValueError, TypeError):
-        return "0.0%"
-
-def format_decimal(value: Union[float, str, None], decimals: int = 1) -> str:
-    """
-    Format value as decimal string
-    
-    Args:
-        value: Value to format
-        decimals: Number of decimal places
-        
-    Returns:
-        Formatted decimal string
-    """
-    if value is None:
-        return "0.0"
-    
-    try:
-        num = float(value)
-        return f"{num:.{decimals}f}"
-    except (ValueError, TypeError):
-        return "0.0"
-
-def format_integer(value: Union[int, str, None]) -> str:
-    """
-    Format value as integer string
-    
-    Args:
-        value: Value to format
-        
-    Returns:
-        Formatted integer string
-    """
-    if value is None:
-        return "0"
-    
-    try:
-        num = int(float(value))
-        return str(num)
-    except (ValueError, TypeError):
-        return "0"
-
-def clean_team_code(team_code: str) -> str:
-    """
-    Clean and validate team code
-    
-    Args:
-        team_code: Raw team code
-        
-    Returns:
-        Cleaned team code (3 characters)
+        Standardized PFR team code
     """
     if not team_code:
         return ""
     
-    # Remove extra whitespace and convert to uppercase
-    cleaned = team_code.strip().upper()
+    # Clean the team code
+    team_code = team_code.strip().upper()
     
-    # Ensure it's exactly 3 characters
-    if len(cleaned) > 3:
-        cleaned = cleaned[:3]
-    elif len(cleaned) < 3:
-        cleaned = cleaned.ljust(3)
+    # Handle multi-team codes (like "2TM", "3TM")
+    if re.match(r'\d+TM', team_code):
+        return team_code  # Keep as-is for multi-team players
     
-    return cleaned
-
-def parse_height(height_str: str) -> Optional[int]:
-    """
-    Parse height string to inches
-    
-    Args:
-        height_str: Height string (e.g., "6'2"", "74")
+    # PFR team code mapping - standardize to PFR's current codes
+    pfr_team_mapping = {
+        # Handle variations and ensure we use PFR's standard codes
+        'SF': 'SFO',           # San Francisco 49ers
+        'GB': 'GNB',           # Green Bay Packers  
+        'KC': 'KAN',           # Kansas City Chiefs
+        'LV': 'LVR',           # Las Vegas Raiders
+        'NE': 'NWE',           # New England Patriots
+        'NO': 'NOR',           # New Orleans Saints
+        'TB': 'TAM',           # Tampa Bay Buccaneers
+        'TBB': 'TAM',          # Tampa Bay Buccaneers (alternate)
         
-    Returns:
-        Height in inches or None if parsing fails
-    """
-    if not height_str:
-        return None
-    
-    # Handle format like "6'2""
-    match = re.match(r"(\d+)'(\d+)\"", height_str)
-    if match:
-        feet = int(match.group(1))
-        inches = int(match.group(2))
-        return feet * 12 + inches
-    
-    # Handle format like "74" (inches)
-    try:
-        inches = int(height_str)
-        if 60 <= inches <= 84:  # Reasonable height range
-            return inches
-    except (ValueError, TypeError):
-        pass
-    
-    return None
-
-def parse_weight(weight_str: str) -> Optional[int]:
-    """
-    Parse weight string to pounds
-    
-    Args:
-        weight_str: Weight string (e.g., "220 lbs", "220")
+        # Standard codes that match (keep as-is)
+        'ARI': 'ARI',          # Arizona Cardinals
+        'ATL': 'ATL',          # Atlanta Falcons
+        'BAL': 'BAL',          # Baltimore Ravens
+        'BUF': 'BUF',          # Buffalo Bills
+        'CAR': 'CAR',          # Carolina Panthers
+        'CHI': 'CHI',          # Chicago Bears
+        'CIN': 'CIN',          # Cincinnati Bengals
+        'CLE': 'CLE',          # Cleveland Browns
+        'DAL': 'DAL',          # Dallas Cowboys
+        'DEN': 'DEN',          # Denver Broncos
+        'DET': 'DET',          # Detroit Lions
+        'HOU': 'HOU',          # Houston Texans
+        'IND': 'IND',          # Indianapolis Colts
+        'JAX': 'JAX',          # Jacksonville Jaguars (sometimes JAC)
+        'JAC': 'JAX',          # Jacksonville Jaguars (alternate)
+        'LAC': 'LAC',          # Los Angeles Chargers
+        'LAR': 'LAR',          # Los Angeles Rams
+        'MIA': 'MIA',          # Miami Dolphins
+        'MIN': 'MIN',          # Minnesota Vikings
+        'NYG': 'NYG',          # New York Giants
+        'NYJ': 'NYJ',          # New York Jets
+        'PHI': 'PHI',          # Philadelphia Eagles
+        'PIT': 'PIT',          # Pittsburgh Steelers
+        'SEA': 'SEA',          # Seattle Seahawks
+        'TEN': 'TEN',          # Tennessee Titans
+        'WAS': 'WAS',          # Washington Commanders
         
-    Returns:
-        Weight in pounds or None if parsing fails
-    """
-    if not weight_str:
-        return None
-    
-    # Extract numeric value
-    match = re.search(r'(\d+)', weight_str)
-    if match:
-        weight = int(match.group(1))
-        if 150 <= weight <= 350:  # Reasonable weight range
-            return weight
-    
-    return None
-
-def parse_date(date_str: str) -> Optional[date]:
-    """
-    Parse date string to date object
-    
-    Args:
-        date_str: Date string in various formats
-        
-    Returns:
-        Date object or None if parsing fails
-    """
-    if not date_str:
-        return None
-    
-    # Common date formats
-    formats = [
-        '%Y-%m-%d',
-        '%m/%d/%Y',
-        '%m-%d-%Y',
-        '%B %d, %Y',
-        '%b %d, %Y'
-    ]
-    
-    for fmt in formats:
-        try:
-            return datetime.strptime(date_str, fmt).date()
-        except ValueError:
-            continue
-    
-    return None
-
-def extract_numeric_value(text: str) -> Optional[float]:
-    """
-    Extract numeric value from text containing numbers
-    
-    Args:
-        text: Text that may contain numbers
-        
-    Returns:
-        Numeric value or None if not found
-    """
-    if not text:
-        return None
-    
-    # Find first number in text
-    match = re.search(r'[-+]?\d*\.?\d+', text)
-    if match:
-        try:
-            return float(match.group())
-        except (ValueError, TypeError):
-            pass
-    
-    return None
-
-def is_valid_season(season: int) -> bool:
-    """
-    Check if season is within valid range
-    
-    Args:
-        season: Season year
-        
-    Returns:
-        True if valid season
-    """
-    return 1920 <= season <= 2030
-
-def is_valid_rating(rating: float) -> bool:
-    """
-    Check if passer rating is within valid range
-    
-    Args:
-        rating: NFL passer rating
-        
-    Returns:
-        True if valid rating
-    """
-    return 0.0 <= rating <= 158.3
-
-def is_valid_qbr(qbr: float) -> bool:
-    """
-    Check if QBR is within valid range
-    
-    Args:
-        qbr: ESPN Total QBR
-        
-    Returns:
-        True if valid QBR
-    """
-    return 0.0 <= qbr <= 100.0
-
-def is_valid_completion_percentage(pct: float) -> bool:
-    """
-    Check if completion percentage is within valid range
-    
-    Args:
-        pct: Completion percentage
-        
-    Returns:
-        True if valid percentage
-    """
-    return 0.0 <= pct <= 100.0
-
-def normalize_split_type(split_type: str) -> str:
-    """
-    Normalize split type string to standard format
-    
-    Args:
-        split_type: Raw split type string
-        
-    Returns:
-        Normalized split type
-    """
-    if not split_type:
-        return ""
-    
-    # Convert to lowercase and replace spaces with underscores
-    normalized = split_type.lower().replace(' ', '_')
-    
-    # Common mappings
-    mappings = {
-        'home_away': 'home_away',
-        'by_quarter': 'by_quarter',
-        'by_half': 'by_half',
-        'by_month': 'by_month',
-        'by_down': 'by_down',
-        'by_distance': 'by_distance',
-        'win_loss': 'win_loss',
-        'vs_division': 'vs_division',
-        'indoor_outdoor': 'indoor_outdoor',
-        'surface': 'surface',
-        'weather': 'weather',
-        'temperature': 'temperature',
-        'by_score': 'by_score',
-        'red_zone': 'red_zone',
-        'time_of_game': 'time_of_game',
-        'vs_winning_teams': 'vs_winning_teams',
-        'day_of_week': 'day_of_week',
-        'game_time': 'game_time',
-        'playoff_type': 'playoff_type'
+        # PFR standard codes (ensure they stay standard)
+        'SFO': 'SFO',          # San Francisco 49ers
+        'GNB': 'GNB',          # Green Bay Packers
+        'KAN': 'KAN',          # Kansas City Chiefs  
+        'LVR': 'LVR',          # Las Vegas Raiders
+        'NWE': 'NWE',          # New England Patriots
+        'NOR': 'NOR',          # New Orleans Saints
+        'TAM': 'TAM',          # Tampa Bay Buccaneers
     }
     
-    return mappings.get(normalized, normalized)
-
-def generate_session_id() -> str:
-    """
-    Generate unique session ID for scraping logs
+    # Return mapped code or original if not found
+    mapped_code = pfr_team_mapping.get(team_code, team_code)
     
-    Returns:
-        Unique session ID
-    """
-    import uuid
-    return str(uuid.uuid4())
+    # Log if we're doing a mapping
+    if mapped_code != team_code:
+        logger.debug(f"Mapped team code: {team_code} -> {mapped_code}")
+    
+    return mapped_code
 
-def calculate_processing_time(start_time: datetime, end_time: datetime) -> float:
+def validate_team_code(team_code: str) -> bool:
     """
-    Calculate processing time in seconds
+    Validate if team code is a valid NFL team code
     
     Args:
-        start_time: Start datetime
-        end_time: End datetime
+        team_code: Team code to validate
         
     Returns:
-        Processing time in seconds
+        True if valid NFL team code
     """
-    return (end_time - start_time).total_seconds()
+    valid_pfr_codes = {
+        'ARI', 'ATL', 'BAL', 'BUF', 'CAR', 'CHI', 'CIN', 'CLE',
+        'DAL', 'DEN', 'DET', 'GNB', 'HOU', 'IND', 'JAX', 'KAN',
+        'LAC', 'LAR', 'LVR', 'MIA', 'MIN', 'NWE', 'NOR', 'NYG',
+        'NYJ', 'PHI', 'PIT', 'SEA', 'SFO', 'TAM', 'TEN', 'WAS'
+    }
+    
+    # Also allow multi-team codes
+    if re.match(r'\d+TM', team_code):
+        return True
+    
+    return team_code in valid_pfr_codes
+
+def validate_qb_stats(stats_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validate QB statistics for data integrity
+    
+    Args:
+        stats_dict: Dictionary of QB statistics
+        
+    Returns:
+        Dictionary with validation results and cleaned stats
+    """
+    errors = []
+    warnings = []
+    
+    # Extract stats with safe conversion
+    completions = safe_int(stats_dict.get('cmp', 0))
+    attempts = safe_int(stats_dict.get('att', 0))
+    yards = safe_int(stats_dict.get('yds', 0))
+    touchdowns = safe_int(stats_dict.get('td', 0))
+    interceptions = safe_int(stats_dict.get('int', 0))
+    rating = safe_float(stats_dict.get('rate', 0.0))
+    
+    # Logical consistency checks
+    if completions > attempts and attempts > 0:
+        errors.append(f"Completions ({completions}) cannot exceed attempts ({attempts})")
+    
+    if rating < 0 or rating > 158.3:
+        warnings.append(f"Unusual passer rating: {rating} (valid range: 0-158.3)")
+    
+    if touchdowns < 0:
+        errors.append(f"Touchdowns cannot be negative: {touchdowns}")
+    
+    if interceptions < 0:
+        errors.append(f"Interceptions cannot be negative: {interceptions}")
+    
+    if yards < 0:
+        errors.append(f"Passing yards cannot be negative: {yards}")
+    
+    # Range validation
+    if attempts > 1000:
+        warnings.append(f"Unusually high attempts: {attempts}")
+    
+    if yards > 6000:
+        warnings.append(f"Unusually high passing yards: {yards}")
+    
+    return {
+        'valid': len(errors) == 0,
+        'errors': errors,
+        'warnings': warnings,
+        'cleaned_stats': {
+            'cmp': completions,
+            'att': attempts,
+            'yds': yards,
+            'td': touchdowns,
+            'int': interceptions,
+            'rate': rating
+        }
+    }
+
+def generate_session_id() -> str:
+    """Generate a unique session ID for tracking scraping sessions"""
+    from uuid import uuid4
+    return str(uuid4())
 
 def format_duration(seconds: float) -> str:
     """
-    Format duration in human-readable format
+    Format duration in seconds to human readable string
     
     Args:
         seconds: Duration in seconds
@@ -664,36 +317,27 @@ def format_duration(seconds: float) -> str:
         Formatted duration string
     """
     if seconds < 60:
-        return f"{seconds:.1f} seconds"
+        return f"{seconds:.1f}s"
     elif seconds < 3600:
         minutes = seconds / 60
-        return f"{minutes:.1f} minutes"
+        return f"{minutes:.1f}m"
     else:
         hours = seconds / 3600
-        return f"{hours:.1f} hours"
+        return f"{hours:.1f}h"
 
-def log_data_quality_metrics(
-    total_records: int,
-    valid_records: int,
-    invalid_records: int,
-    errors_by_type: Dict[str, int]
-) -> None:
+def calculate_processing_time(start_time: datetime, end_time: datetime) -> float:
     """
-    Log data quality metrics
+    Calculate processing time between two timestamps
     
     Args:
-        total_records: Total number of records processed
-        valid_records: Number of valid records
-        invalid_records: Number of invalid records
-        errors_by_type: Dictionary of error counts by type
+        start_time: Start timestamp
+        end_time: End timestamp
+        
+    Returns:
+        Processing time in seconds
     """
-    logger.info(f"Data Quality Report:")
-    logger.info(f"  Total Records: {total_records}")
-    logger.info(f"  Valid Records: {valid_records}")
-    logger.info(f"  Invalid Records: {invalid_records}")
-    logger.info(f"  Success Rate: {(valid_records/total_records*100):.1f}%" if total_records > 0 else "  Success Rate: 0%")
+    if not start_time or not end_time:
+        return 0.0
     
-    if errors_by_type:
-        logger.info("  Errors by Type:")
-        for error_type, count in errors_by_type.items():
-            logger.info(f"    {error_type}: {count}") 
+    delta = end_time - start_time
+    return delta.total_seconds() 

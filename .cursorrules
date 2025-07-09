@@ -1,26 +1,33 @@
-# Cursor AI IDE Rules for NFL QB Data Scraping Project
+# NFL QB Scraper Development Rules for Cursor AI
+# Comprehensive rules for script-to-CLI migration and ongoing development
 
-## Project Overview
-This project scrapes NFL quarterback data from Pro Football Reference and stores it in a PostgreSQL database using Supabase. The system includes Python scrapers, SQL schemas, and TypeScript/Drizzle ORM for data access.
+## PROJECT OVERVIEW
+This project scrapes NFL quarterback data from Pro Football Reference and stores it in a PostgreSQL database using Supabase. Currently undergoing migration from scattered scripts to a unified CLI architecture.
 
-## General Development Guidelines
+## MIGRATION PROCESS GUARDRAILS
 
-### Code Quality Standards
-- Write clean, readable, and maintainable code
-- Follow language-specific best practices and conventions
-- Prioritize error handling and data validation
-- Include comprehensive logging and monitoring
-- Write self-documenting code with clear variable names
-- Add docstrings and comments for complex logic
+### Phase Compliance Rules
+- NEVER skip migration phases - follow Foundation → Core → Data → Polish sequence
+- ALWAYS maintain backwards compatibility until Phase 4 deprecation
+- NEVER break existing scripts during Phases 1-3
+- ALWAYS test each phase deliverable before proceeding to next phase
+- NEVER merge code without passing the phase-specific success criteria
 
-### Documentation Requirements
-- Every function must have a docstring explaining purpose, parameters, and return values
-- Include type hints for all Python functions
-- Document complex algorithms and business logic
-- Add inline comments for non-obvious code sections
-- Maintain up-to-date README files
+### Architecture Compliance
+- ALL new code must go in proper module structure (src/cli/, src/core/, src/operations/)
+- NEVER put business logic in CLI command handlers
+- ALWAYS use dependency injection patterns for testability
+- NEVER create circular dependencies between modules
+- ALWAYS follow single responsibility principle for classes and functions
 
-## Python-Specific Rules
+### Migration-Specific Patterns
+- NEW CLI commands must inherit from BaseCommand class
+- ALL scrapers must extend the unified CoreScraper class
+- NEVER duplicate existing functionality - consolidate instead
+- ALWAYS use the new configuration system (src/config/settings.py)
+- NEVER hardcode values - use configuration management
+
+## PYTHON CODE QUALITY STANDARDS
 
 ### Code Style & Structure
 - Follow PEP 8 style guidelines strictly
@@ -30,13 +37,30 @@ This project scrapes NFL quarterback data from Pro Football Reference and stores
 - Keep functions focused and under 50 lines when possible
 - Use descriptive variable names (avoid abbreviations)
 
-### Error Handling
-- Always use try-except blocks for external API calls
+### Type Safety Requirements
+- ALL functions must have complete type hints (args, returns, variables)
+- NEVER use 'any' type - use Union, Optional, or specific types
+- ALWAYS import from typing module properly
+- ALL dataclasses must use proper type annotations
+- NEVER skip type checking - must pass mypy validation
+
+### Error Handling Standards
+- NEVER use bare except clauses - always specify exception types
+- ALWAYS provide contextual error messages with relevant data
+- NEVER suppress errors silently - log and handle appropriately
+- ALL API calls must have proper retry logic with exponential backoff
+- ALWAYS use custom exception classes for domain-specific errors
 - Implement proper retry logic with exponential backoff
-- Log errors with appropriate context and stack traces
-- Use custom exceptions for domain-specific errors
-- Never use bare `except:` clauses
 - Handle rate limiting gracefully
+
+### Documentation Requirements
+- ALL public functions must have comprehensive docstrings
+- ALWAYS include Args, Returns, Raises sections in docstrings
+- NEVER omit examples in docstrings for complex functions
+- ALL classes must have class-level docstrings explaining purpose
+- ALWAYS update module-level docstrings when adding new functionality
+- Document complex algorithms and business logic
+- Add inline comments for non-obvious code sections
 
 ### Data Processing
 - Validate all scraped data before database insertion
@@ -46,14 +70,6 @@ This project scrapes NFL quarterback data from Pro Football Reference and stores
 - Use safe type conversion functions (safe_int, safe_float)
 - Validate data ranges and constraints
 
-### Database Operations
-- Use parameterized queries to prevent SQL injection
-- Implement proper connection pooling and cleanup
-- Use transactions for multi-step operations
-- Include conflict resolution for upsert operations
-- Log database operations with timing information
-- Handle database connection failures gracefully
-
 ### Web Scraping Best Practices
 - Respect robots.txt and rate limits
 - Use appropriate User-Agent headers
@@ -61,143 +77,236 @@ This project scrapes NFL quarterback data from Pro Football Reference and stores
 - Handle HTTP errors and retries
 - Cache responses when appropriate
 - Monitor and log request statistics
+- ALL scrapers must implement proper rate limiting (minimum 2 seconds between requests)
+- NEVER make concurrent requests without permission
+- ALL scraping operations must be resumable for long runs
 
-## SQL-Specific Rules
+## SQL CODE QUALITY STANDARDS
 
-### Schema Design
-- Use appropriate data types (DECIMAL for money, TIMESTAMP for dates)
-- Include proper constraints (CHECK, UNIQUE, FOREIGN KEY)
+### Schema Design Rules
+- ALL tables must have proper primary keys (prefer PFR IDs)
+- ALWAYS use appropriate data types (DECIMAL for money, TIMESTAMP for dates)
+- NEVER use VARCHAR without length limits
+- ALL foreign keys must have proper CASCADE/RESTRICT rules
+- ALWAYS include meaningful constraints (CHECK, UNIQUE, NOT NULL)
 - Add meaningful indexes for query performance
 - Use descriptive table and column names
 - Include comments on tables and complex columns
 - Design for both OLTP and OLAP workloads
 
-### Query Optimization
-- Use appropriate indexes for common query patterns
-- Avoid SELECT * in production code
+### Query Standards
+- ALL queries must use parameterized statements (no string concatenation)
+- NEVER use SELECT * in production code
+- ALWAYS use proper JOIN syntax (no comma joins)
+- ALL complex queries must have EXPLAIN plans validated
+- NEVER commit queries without proper indexing consideration
 - Use LIMIT for potentially large result sets
 - Prefer JOINs over subqueries when possible
-- Use EXPLAIN to analyze query performance
 - Include proper WHERE clause ordering
 
-### Data Integrity
-- Use transactions for multi-table operations
-- Implement proper foreign key relationships
-- Add check constraints for data validation
-- Use NOT NULL where appropriate
-- Design for data consistency and referential integrity
-
-## TypeScript/Drizzle ORM Rules
-
-### Type Safety
-- Use strict TypeScript configuration
-- Define interfaces for all data structures
-- Use union types for constrained values
-- Avoid `any` type - use `unknown` if necessary
-- Implement proper null/undefined handling
-- Use type guards for runtime type checking
-
-### Database Schema
-- Define schema types that match database structure
-- Use proper relationship definitions
-- Include all necessary indexes in schema
-- Use enums for constrained values
-- Implement proper conflict resolution
-- Add validation schemas for input data
-
-### Query Building
-- Use type-safe query builders
-- Implement proper error handling for database operations
-- Use prepared statements for dynamic queries
-- Include proper transaction handling
-- Log database queries in development
-- Implement query result validation
-
-## Specific Code Patterns
-
-### Data Validation
-```python
-def validate_qb_stats(stats: QBStats) -> List[str]:
-    """
-    Validate QB statistics for data integrity.
-    
-    Args:
-        stats: QB statistics to validate
-        
-    Returns:
-        List of validation error messages
-    """
-    errors = []
-    
-    if stats.completions > stats.attempts:
-        errors.append("Completions cannot exceed attempts")
-    
-    if stats.rating < 0 or stats.rating > 158.3:
-        errors.append("Invalid passer rating range")
-    
-    return errors
-```
-
-### Error Handling
-```python
-def make_request_with_retry(url: str, max_retries: int = 3) -> Optional[Response]:
-    """
-    Make HTTP request with exponential backoff retry logic.
-    
-    Args:
-        url: URL to request
-        max_retries: Maximum number of retry attempts
-        
-    Returns:
-        Response object or None if all retries failed
-    """
-    for attempt in range(max_retries):
-        try:
-            response = requests.get(url, timeout=30)
-            response.raise_for_status()
-            return response
-        except requests.exceptions.RequestException as e:
-            if attempt == max_retries - 1:
-                logger.error(f"All retries failed for {url}: {e}")
-                return None
-            wait_time = 2 ** attempt
-            time.sleep(wait_time)
-    
-    return None
-```
+### Migration Safety
+- ALL schema changes must be backwards compatible during migration
+- NEVER drop tables during Phases 1-3 - only add or modify
+- ALWAYS backup database before schema changes
+- ALL migrations must be tested on copy of production data
+- NEVER modify existing data without validation scripts
 
 ### Database Operations
-```python
-def bulk_insert_with_conflict_resolution(
-    table_name: str, 
-    data: List[Dict[str, Any]], 
-    conflict_columns: List[str]
-) -> None:
-    """
-    Perform bulk insert with conflict resolution.
-    
-    Args:
-        table_name: Target table name
-        data: List of dictionaries to insert
-        conflict_columns: Columns to use for conflict resolution
-    """
-    if not data:
-        return
-    
-    try:
-        # Implementation here
-        pass
-    except Exception as e:
-        logger.error(f"Bulk insert failed for {table_name}: {e}")
-        raise
-```
+- Use parameterized queries to prevent SQL injection
+- Implement proper connection pooling and cleanup
+- Use transactions for multi-step operations
+- Include conflict resolution for upsert operations
+- Log database operations with timing information
+- Handle database connection failures gracefully
+- ALL database operations must use connection pooling
+- NEVER open connections without proper cleanup (use context managers)
+- ALWAYS use bulk operations for inserting multiple records
 
-## File Organization
+## PERFORMANCE STANDARDS
+
+### Scraping Performance
+- NEVER scrape without progress tracking for operations > 30 seconds
+- ALWAYS implement request timeouts (30 seconds max)
+
+### Database Performance
+- ALL queries must have appropriate indexes for expected usage patterns
+- NEVER commit without checking query performance impact
+- Use appropriate indexes for query patterns
+- Implement proper query optimization
+- Use connection pooling
+- Monitor query execution times
+- Use bulk operations when possible
+- Implement proper transaction boundaries
+
+### Memory Management
+- ALL large datasets must be processed in streaming fashion
+- NEVER load entire datasets into memory at once
+- ALWAYS clean up resources (connections, files, etc.)
+- ALL long-running operations must have memory monitoring
+- NEVER create memory leaks in data processing pipelines
+- Use context managers for resource management
+- Use streaming for large data processing
+- Monitor memory usage in production
+
+### Application Performance
+- Use generators for large datasets
+- Use appropriate data structures (sets for lookups, lists for ordering)
+- Implement caching for frequently accessed data
+- Profile code for performance bottlenecks
+- Optimize I/O operations
+- Use asynchronous processing when appropriate
+
+## SECURITY STANDARDS
+
+### Data Protection
+- ALL sensitive data must use environment variables
+- NEVER hardcode database credentials or API keys
+- ALWAYS validate and sanitize external data inputs
+- ALL database queries must use parameterized statements
+- NEVER log sensitive information in plain text
+- Never log sensitive data (passwords, API keys)
+- Implement proper input validation
+
+### Authentication & Authorization
+- ALL database connections must use secure authentication
+- NEVER use default or weak passwords
+- ALWAYS validate user inputs for injection attacks
+- ALL API endpoints must have proper authentication
+- NEVER expose internal system details in error messages
+- Use proper authentication for database connections
+- Implement rate limiting for API calls
+- Use HTTPS for all external communications
+- Validate SSL certificates
+- Monitor for suspicious activity
+
+## TESTING STANDARDS
+
+### Unit Testing Requirements
+- ALL new functions must have corresponding unit tests
+- NEVER commit code without tests - minimum 85% coverage
+- ALWAYS test both success and failure scenarios
+- ALL database operations must be tested with mock connections
+- NEVER use production database for testing
+- ALL new modules must have comprehensive unit tests
+- NEVER mock what you don't own (external APIs, databases)
+- ALWAYS test edge cases and error conditions
+- ALL tests must be fast (< 1 second each)
+- NEVER write tests that depend on external services
+
+### Integration Testing
+- ALL CLI commands must have integration tests
+- NEVER skip testing of database operations
+- ALWAYS test with realistic data volumes
+- ALL scrapers must be tested with mock HTTP responses
+- NEVER commit without testing complete workflows
+- Test database operations with actual database
+- Test web scraping with mock responses
+- Test end-to-end data flow
+- Use test fixtures for consistent data
+- Test error scenarios and edge cases
+
+### Validation Testing
+- ALL migration phases must have validation tests
+- NEVER assume equivalence - always verify with known data
+- ALWAYS test with edge cases (multi-team players, missing data)
+- ALL performance claims must be verified with benchmarks
+- NEVER deploy without comprehensive validation
+
+### Test Data Management
+- Use realistic but anonymized test data
+- Create test fixtures for common scenarios
+- Implement data factories for test object creation
+- Use separate test databases
+- Clean up test data after each test
+
+## LOGGING AND MONITORING
+
+### Logging Standards
+- ALL operations must use structured logging with context
+- NEVER use print statements - use proper logging levels
+- ALWAYS include relevant metadata in log messages (player_name, season, etc.)
+- ALL errors must be logged with full context and stack traces
+- NEVER log sensitive information (passwords, API keys)
+- Use structured logging with consistent format
+- Include context information (user, session, request ID)
+- Log at appropriate levels (DEBUG, INFO, WARNING, ERROR)
+- Include timing information for operations
+- Use correlation IDs for tracking requests
+
+### Performance Monitoring
+- ALL scraping operations must record timing and success rates
+- NEVER ignore performance regressions > 5%
+- ALWAYS monitor memory usage during large operations
+- ALL database queries must have performance monitoring
+- NEVER deploy without baseline performance metrics
+- Track key metrics (requests per second, error rates)
+- Monitor database performance and connection usage
+- Set up alerts for critical failures
+- Track data quality metrics
+- Monitor resource usage (CPU, memory, disk)
+
+### Alerting
+- ALL critical failures must generate alerts
+- NEVER ignore recurring error patterns
+- ALWAYS monitor data quality metrics
+- ALL performance degradation must trigger investigation
+- NEVER let quality issues accumulate
+
+## REFACTORING SPECIFIC RULES
+
+### Code Consolidation
+- WHEN combining multiple scripts, ALWAYS preserve all functionality
+- NEVER delete old scripts until new CLI commands are proven equivalent
+- ALWAYS create mapping document showing old script → new command
+- ALL consolidated code must maintain or improve performance
+- NEVER introduce regressions during consolidation
+
+### Configuration Management
+- ALL configuration must be centralized in src/config/settings.py
+- NEVER duplicate configuration values across modules
+- ALWAYS provide sensible defaults for optional settings
+- ALL configuration changes must be backwards compatible
+- NEVER hardcode environment-specific values
+
+### Legacy Support
+- ALL legacy scripts must continue working until Phase 4
+- NEVER remove legacy functionality without replacement
+- ALWAYS provide migration path for existing users
+- ALL breaking changes must be clearly documented
+- NEVER surprise users with sudden workflow changes
+
+## DOCUMENTATION STANDARDS
+
+### Code Documentation
+- ALL modules must have comprehensive README sections
+- NEVER omit examples in function docstrings
+- ALWAYS document complex algorithms and business logic
+- ALL configuration options must be documented
+- NEVER assume users understand domain-specific concepts
+
+### User Documentation
+- ALL CLI commands must have help text with examples
+- NEVER create commands without usage documentation
+- ALWAYS provide troubleshooting guides for common issues
+- ALL migration steps must be documented for users
+- NEVER assume users can figure out new workflows
+
+### Development Documentation
+- ALL architecture decisions must be documented
+- NEVER make significant changes without updating docs
+- ALWAYS maintain API documentation for internal modules
+- ALL testing procedures must be documented
+- NEVER leave future developers guessing about design choices
+
+## FILE ORGANIZATION
 
 ### Directory Structure
 ```
-nfl-qb-scraper/
+pfr-qb-scraper/
 ├── src/
+│   ├── cli/               # CLI command handlers
+│   ├── core/              # Core business logic
+│   ├── operations/        # High-level operations
 │   ├── scrapers/          # Web scraping modules
 │   ├── database/          # Database operations
 │   ├── models/            # Data models and schemas
@@ -206,7 +315,8 @@ nfl-qb-scraper/
 ├── sql/                   # SQL schemas and migrations
 ├── tests/                 # Test files
 ├── docs/                  # Documentation
-└── scripts/               # Utility scripts
+├── scripts/               # Legacy utility scripts
+└── legacy/                # Deprecated scripts (Phase 4)
 ```
 
 ### Naming Conventions
@@ -217,89 +327,53 @@ nfl-qb-scraper/
 - Database tables: snake_case (e.g., `qb_stats`)
 - Database columns: snake_case (e.g., `player_name`)
 
-## Performance Considerations
+## CONTINUOUS INTEGRATION RULES
 
-### Python Performance
-- Use generators for large datasets
-- Implement proper connection pooling
-- Use bulk operations for database insertions
-- Profile code for performance bottlenecks
-- Use appropriate data structures (sets for lookups, lists for ordering)
-- Implement caching for frequently accessed data
+### Pre-commit Requirements
+- ALL code must pass linting (flake8, black, isort)
+- NEVER commit code that doesn't pass type checking
+- ALWAYS run tests before committing
+- ALL commits must have meaningful messages
+- NEVER commit secrets or sensitive data
 
-### Database Performance
-- Use appropriate indexes for query patterns
-- Implement proper query optimization
-- Use connection pooling
-- Monitor query execution times
-- Use bulk operations when possible
-- Implement proper transaction boundaries
+### Build Pipeline
+- ALL builds must include comprehensive testing
+- NEVER deploy without passing all quality gates
+- ALWAYS include security scanning in pipeline
+- ALL performance regressions must be caught by CI
+- NEVER merge without code review approval
 
-### Memory Management
-- Clean up resources properly (close connections, files)
-- Use context managers for resource management
-- Avoid loading entire datasets into memory
-- Use streaming for large data processing
-- Monitor memory usage in production
+### Quality Gates
+- ALL modules must maintain minimum 85% test coverage
+- NEVER merge code that reduces overall test coverage
+- ALWAYS validate that new code follows project patterns
+- ALL database migrations must be tested in CI
+- NEVER skip quality checks for "urgent" changes
 
-## Testing Guidelines
+## SPECIFIC ANTI-PATTERNS TO AVOID
 
-### Unit Tests
-- Test all public methods and functions
-- Use meaningful test names that describe the scenario
-- Test both success and failure cases
-- Mock external dependencies (APIs, databases)
-- Use parameterized tests for multiple scenarios
-- Maintain high test coverage (>80%)
+### Code Smells
+- NEVER create god classes with > 10 methods
+- AVOID functions with > 50 lines or > 5 parameters
+- NEVER use global variables for state management
+- AVOID deep nesting (> 3 levels)
+- NEVER duplicate code - create shared utilities
 
-### Integration Tests
-- Test database operations with actual database
-- Test web scraping with mock responses
-- Test end-to-end data flow
-- Use test fixtures for consistent data
-- Test error scenarios and edge cases
+### Architecture Violations
+- NEVER put database queries in CLI command handlers
+- AVOID tight coupling between modules
+- NEVER create circular imports
+- AVOID exposing internal implementation details
+- NEVER bypass the established configuration system
 
-### Test Data
-- Use realistic but anonymized test data
-- Create test fixtures for common scenarios
-- Implement data factories for test object creation
-- Use separate test databases
-- Clean up test data after each test
+### Migration Mistakes
+- NEVER break existing functionality during migration
+- AVOID big-bang changes - always incremental
+- NEVER skip validation steps
+- AVOID feature creep during migration
+- NEVER ignore backwards compatibility requirements
 
-## Security Considerations
-
-### Data Protection
-- Never log sensitive data (passwords, API keys)
-- Use environment variables for configuration
-- Implement proper input validation
-- Use parameterized queries to prevent SQL injection
-- Validate and sanitize all external data
-
-### API Security
-- Use proper authentication for database connections
-- Implement rate limiting for API calls
-- Use HTTPS for all external communications
-- Validate SSL certificates
-- Monitor for suspicious activity
-
-## Monitoring and Logging
-
-### Logging Standards
-- Use structured logging with consistent format
-- Include context information (user, session, request ID)
-- Log at appropriate levels (DEBUG, INFO, WARNING, ERROR)
-- Include timing information for operations
-- Log errors with full stack traces
-- Use correlation IDs for tracking requests
-
-### Monitoring
-- Track key metrics (requests per second, error rates)
-- Monitor database performance and connection usage
-- Set up alerts for critical failures
-- Track data quality metrics
-- Monitor resource usage (CPU, memory, disk)
-
-## Code Review Guidelines
+## CODE REVIEW GUIDELINES
 
 ### Review Checklist
 - [ ] Code follows project style guidelines
@@ -310,6 +384,8 @@ nfl-qb-scraper/
 - [ ] Security best practices are followed
 - [ ] Database operations are optimized
 - [ ] Logging is appropriate and helpful
+- [ ] Migration phase requirements are met
+- [ ] Backwards compatibility is maintained
 
 ### Common Issues to Watch For
 - Missing error handling for external API calls
@@ -320,8 +396,9 @@ nfl-qb-scraper/
 - Memory leaks in long-running processes
 - Missing logging for debugging
 - Hardcoded configuration values
+- Breaking existing functionality during migration
 
-## Development Workflow
+## DEVELOPMENT WORKFLOW
 
 ### Git Workflow
 - Use meaningful commit messages
@@ -339,7 +416,7 @@ nfl-qb-scraper/
 - Use pre-commit hooks for automated checks
 - Use coverage tools to track test coverage
 
-## Environment-Specific Rules
+## ENVIRONMENT-SPECIFIC RULES
 
 ### Development Environment
 - Use debug logging levels
@@ -356,22 +433,51 @@ nfl-qb-scraper/
 - Implement graceful shutdown procedures
 - Use proper error reporting
 
-## Performance Optimization
+## RULE CONFLICTS AND FLEXIBILITY
 
-### Database Optimization
-- Use appropriate indexes for query patterns
-- Implement query result caching
-- Use database connection pooling
-- Monitor slow queries and optimize
-- Use bulk operations for large datasets
-- Implement proper transaction boundaries
+### Phase-Based Rule Application
+Rules apply with varying strictness based on migration phase:
+- **Phase 1 (Foundation)**: Relaxed standards for bridge code, 60% test coverage minimum
+- **Phase 2 (Core)**: Moderate standards for functional equivalence, 70% test coverage minimum  
+- **Phase 3 (Advanced)**: Higher standards for advanced features, 80% test coverage minimum
+- **Phase 4 (Production)**: Full compliance required, 85% test coverage minimum
 
-### Application Optimization
-- Use appropriate data structures
-- Implement caching for frequently accessed data
-- Use generators for large datasets
-- Profile code for performance bottlenecks
-- Optimize I/O operations
-- Use asynchronous processing when appropriate
+### Conflict Resolution
+When rules conflict, see `.cursor/rules/conflict-resolution.mdc` for guidance:
+- Mock at application boundaries, not deep in external libraries
+- Use environment-specific configurations (fast tests, respectful production rate limiting)
+- Apply facade patterns for backwards compatibility during migration
+- Prioritize: Security > Data Integrity > Backwards Compatibility > Performance > Code Quality
 
-Remember: These rules should be enforced through code reviews, automated linting, and continuous integration checks. The goal is to maintain high code quality while ensuring the system is robust, maintainable, and performant.
+### Rule Priority Hierarchy
+1. **Security** (never compromise)
+2. **Data integrity** (never compromise)
+3. **Backwards compatibility** (Phases 1-3 only)
+4. **Functional correctness**
+5. **Performance**
+6. **Code quality** 
+7. **Documentation** (lowest priority during migration)
+
+## ENFORCEMENT
+
+These rules are enforced through:
+- Pre-commit hooks for automated checking
+- Code review requirements
+- Continuous integration pipeline
+- Regular code quality audits
+- Migration phase gate reviews
+- Automated linting and type checking
+- Comprehensive test suites
+
+Violations should be caught early and addressed immediately to maintain project quality and migration success.
+
+**See `.cursor/rules/` directory for detailed guidance on:**
+- Migration process guardrails
+- Python and SQL quality standards
+- Testing requirements and strategies
+- CLI-specific development patterns
+- Anti-patterns to avoid
+- Conflict resolution strategies
+- Enforcement mechanisms
+
+Remember: The goal is to transform scattered scripts into a professional, maintainable CLI tool while preserving all existing functionality and maintaining the highest code quality standards.

@@ -1,0 +1,497 @@
+# Python Code Quality Standards
+*Enforce high-quality Python code during migration*
+
+## Type Safety Requirements
+
+### Complete Type Annotations
+- **ALL functions** must have complete type hints (args, returns, variables)
+- **NEVER use 'any' type** - use `Union`, `Optional`, or specific types
+- **ALWAYS import from typing** module properly
+- **ALL dataclasses** must use proper type annotations
+- **NEVER skip type checking** - must pass mypy validation
+
+### Type Hints Examples
+```python
+# ✅ GOOD - Complete type hints
+from typing import List, Optional, Dict, Any
+from dataclasses import dataclass
+
+@dataclass
+class PlayerStats:
+    name: str
+    season: int
+    completions: Optional[int] = None
+    attempts: Optional[int] = None
+
+def scrape_player_stats(
+    player_name: str, 
+    season: int, 
+    include_splits: bool = False
+) -> PlayerStats:
+    """Scrape player statistics with proper typing."""
+    pass
+
+# ❌ BAD - Missing type hints
+def scrape_player_stats(player_name, season, include_splits=False):
+    pass
+```
+
+## Error Handling Standards
+
+### Exception Handling Requirements
+- **NEVER use bare except clauses** - always specify exception types
+- **ALWAYS provide contextual error messages** with relevant data
+- **NEVER suppress errors silently** - log and handle appropriately
+- **ALL API calls** must have proper retry logic with exponential backoff
+- **ALWAYS use custom exception classes** for domain-specific errors
+
+### Error Handling Patterns
+```python
+# ✅ GOOD - Specific exception handling
+import logging
+from typing import Optional
+import requests
+from requests.exceptions import RequestException, Timeout, ConnectionError
+
+logger = logging.getLogger(__name__)
+
+class ScrapingError(Exception):
+    """Custom exception for scraping operations."""
+    pass
+
+class ValidationError(Exception):
+    """Custom exception for data validation."""
+    pass
+
+def make_request_with_retry(
+    url: str, 
+    max_retries: int = 3,
+    timeout: int = 30
+) -> Optional[requests.Response]:
+    """Make HTTP request with exponential backoff retry logic."""
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, timeout=timeout)
+            response.raise_for_status()
+            return response
+        except ConnectionError as e:
+            logger.warning(f"Connection failed for {url} (attempt {attempt + 1}): {e}")
+        except Timeout as e:
+            logger.warning(f"Request timeout for {url} (attempt {attempt + 1}): {e}")
+        except RequestException as e:
+            logger.error(f"Request failed for {url} (attempt {attempt + 1}): {e}")
+            if attempt == max_retries - 1:
+                raise ScrapingError(f"All retries failed for {url}") from e
+        
+        wait_time = 2 ** attempt
+        time.sleep(wait_time)
+    
+    return None
+
+# ❌ BAD - Bare except and silent failure
+def make_request_with_retry(url, max_retries=3):
+    try:
+        response = requests.get(url)
+        return response
+    except:
+        return None
+```
+
+## Code Style & Structure
+
+### PEP 8 Compliance
+- **Follow PEP 8 style guidelines** strictly
+- **Use descriptive variable names** (avoid abbreviations)
+- **Keep functions focused** and under 50 lines when possible
+- **Use f-strings** for string formatting
+- **Prefer dataclasses** over dictionaries for structured data
+
+### Function Structure
+```python
+# ✅ GOOD - Clear, focused function
+def validate_qb_stats(stats: PlayerStats) -> List[str]:
+    """
+    Validate QB statistics for data integrity.
+    
+    Args:
+        stats: PlayerStats object to validate
+        
+    Returns:
+        List of validation error messages (empty if valid)
+        
+    Raises:
+        ValidationError: If stats object is malformed
+        
+    Example:
+        >>> stats = PlayerStats(name="Joe Burrow", completions=25, attempts=20)
+        >>> errors = validate_qb_stats(stats)
+        >>> print(errors)
+        ['Completions cannot exceed attempts']
+    """
+    if not isinstance(stats, PlayerStats):
+        raise ValidationError("Expected PlayerStats object")
+    
+    errors = []
+    
+    if stats.completions and stats.attempts:
+        if stats.completions > stats.attempts:
+            errors.append("Completions cannot exceed attempts")
+    
+    if stats.rating and (stats.rating < 0 or stats.rating > 158.3):
+        errors.append("Invalid passer rating range")
+    
+    return errors
+
+# ❌ BAD - Long function, unclear purpose
+def process_data(data):
+    # 50+ lines of mixed responsibilities
+    pass
+```
+
+## Documentation Requirements
+
+### Docstring Standards
+- **ALL public functions** must have comprehensive docstrings
+- **ALWAYS include Args, Returns, Raises** sections
+- **NEVER omit examples** in docstrings for complex functions
+- **ALL classes** must have class-level docstrings explaining purpose
+- **ALWAYS update module-level docstrings** when adding new functionality
+
+### Documentation Examples
+```python
+# ✅ GOOD - Comprehensive docstring
+def aggregate_multi_team_stats(
+    player_stats: List[PlayerStats], 
+    prefer_combined: bool = True
+) -> PlayerStats:
+    """
+    Aggregate statistics for players who played on multiple teams.
+    
+    This function handles players like Tim Boyle who played for multiple teams
+    in a single season, combining their statistics appropriately.
+    
+    Args:
+        player_stats: List of PlayerStats objects for the same player
+        prefer_combined: If True, prefer 2TM/3TM combined stats over individual team stats
+        
+    Returns:
+        PlayerStats: Aggregated statistics for the player
+        
+    Raises:
+        ValidationError: If player_stats is empty or contains incompatible data
+        AggregationError: If aggregation logic fails
+        
+    Example:
+        >>> tim_boyle_stats = [boyle_mia, boyle_nyg, boyle_2tm]
+        >>> aggregated = aggregate_multi_team_stats(tim_boyle_stats, prefer_combined=True)
+        >>> assert aggregated.team == "2TM"
+        >>> assert aggregated.completions == boyle_2tm.completions
+    """
+    pass
+
+# ❌ BAD - Minimal docstring
+def aggregate_multi_team_stats(player_stats, prefer_combined=True):
+    """Aggregate stats."""
+    pass
+```
+
+## Data Processing Standards
+
+### Data Validation
+- **Validate all scraped data** before database insertion
+- **Handle missing/null values** explicitly
+- **Use safe type conversion** functions
+- **Validate data ranges** and constraints
+- **Implement data cleaning** functions with clear names
+
+### Data Processing Patterns
+```python
+# ✅ GOOD - Robust data processing
+def safe_int(value: Any, default: int = 0) -> int:
+    """Safely convert value to integer with default fallback."""
+    if value is None or value == '':
+        return default
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        logger.warning(f"Could not convert '{value}' to int, using default {default}")
+        return default
+
+def clean_player_name(name: str) -> str:
+    """Clean and standardize player name."""
+    if not name:
+        return ""
+    
+    # Remove extra whitespace
+    name = name.strip()
+    
+    # Remove suffixes like Jr., Sr., II, III, IV
+    suffixes = ['Jr.', 'Sr.', 'II', 'III', 'IV']
+    for suffix in suffixes:
+        if name.endswith(f' {suffix}'):
+            name = name[:-len(suffix)-1].strip()
+    
+    return name
+
+# ❌ BAD - Unsafe conversion
+def process_stats(data):
+    completions = int(data['completions'])  # May crash
+    return completions
+```
+
+## Web Scraping Best Practices
+
+### Rate Limiting and Respect
+- **ALL scrapers** must implement proper rate limiting (minimum 2 seconds between requests)
+- **NEVER make concurrent requests** without permission
+- **ALWAYS implement request timeouts** (30 seconds max)
+- **ALL scraping operations** must be resumable for long runs
+- **NEVER scrape without progress tracking** for operations > 30 seconds
+
+### Scraping Patterns
+```python
+# ✅ GOOD - Respectful scraping
+import time
+from typing import Optional
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+class RobustScraper:
+    """Scraper with rate limiting and retry logic."""
+    
+    def __init__(self, rate_limit: float = 2.0):
+        self.rate_limit = rate_limit
+        self.last_request = 0.0
+        self.session = self._create_session()
+    
+    def _create_session(self) -> requests.Session:
+        """Create session with retry strategy."""
+        session = requests.Session()
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        return session
+    
+    def get_with_rate_limit(self, url: str) -> Optional[requests.Response]:
+        """Make GET request with rate limiting."""
+        # Enforce rate limit
+        elapsed = time.time() - self.last_request
+        if elapsed < self.rate_limit:
+            time.sleep(self.rate_limit - elapsed)
+        
+        try:
+            response = self.session.get(url, timeout=30)
+            response.raise_for_status()
+            self.last_request = time.time()
+            return response
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request failed for {url}: {e}")
+            return None
+
+# ❌ BAD - No rate limiting, concurrent requests
+def scrape_all_players(urls):
+    responses = []
+    for url in urls:
+        response = requests.get(url)  # No rate limiting
+        responses.append(response)
+    return responses
+```
+
+## Configuration Management
+
+### Centralized Configuration
+- **ALL configuration** must be centralized in `src/config/settings.py`
+- **NEVER duplicate configuration** values across modules
+- **ALWAYS provide sensible defaults** for optional settings
+- **NEVER hardcode environment-specific** values
+
+### Configuration Patterns
+```python
+# ✅ GOOD - Centralized configuration
+from dataclasses import dataclass
+from typing import Optional
+import os
+
+@dataclass
+class ScrapingConfig:
+    """Configuration for scraping operations."""
+    rate_limit_delay: float = 2.0
+    max_retries: int = 3
+    timeout: int = 30
+    user_agent: str = "NFL-QB-Scraper/1.0"
+    
+    @classmethod
+    def from_env(cls) -> 'ScrapingConfig':
+        """Load configuration from environment variables."""
+        return cls(
+            rate_limit_delay=float(os.getenv('RATE_LIMIT_DELAY', '2.0')),
+            max_retries=int(os.getenv('MAX_RETRIES', '3')),
+            timeout=int(os.getenv('TIMEOUT', '30')),
+            user_agent=os.getenv('USER_AGENT', 'NFL-QB-Scraper/1.0')
+        )
+
+# ❌ BAD - Hardcoded values scattered everywhere
+def scrape_player(url):
+    response = requests.get(url, timeout=30)  # Hardcoded timeout
+    time.sleep(2.0)  # Hardcoded delay
+    return response
+```
+
+## Performance Considerations
+
+### Memory Management
+- **ALL large datasets** must be processed in streaming fashion
+- **NEVER load entire datasets** into memory at once
+- **ALWAYS clean up resources** (connections, files, etc.)
+- **Use generators** for large datasets
+- **Implement caching** for frequently accessed data
+
+### Performance Patterns
+```python
+# ✅ GOOD - Generator for memory efficiency
+def process_players_streaming(player_urls: List[str]) -> Iterator[PlayerStats]:
+    """Process players one at a time to avoid memory issues."""
+    for url in player_urls:
+        try:
+            stats = scrape_player_stats(url)
+            if stats:
+                yield stats
+        except Exception as e:
+            logger.error(f"Failed to process {url}: {e}")
+            continue
+
+# ❌ BAD - Load everything into memory
+def process_all_players(player_urls):
+    all_stats = []
+    for url in player_urls:
+        stats = scrape_player_stats(url)
+        all_stats.append(stats)  # Memory grows unbounded
+    return all_stats
+```
+
+## Testing Requirements
+
+### Unit Testing Standards
+- **ALL new functions** must have corresponding unit tests
+- **NEVER commit code** without tests - minimum 85% coverage
+- **ALWAYS test both success and failure** scenarios
+- **ALL tests must be fast** (< 1 second each)
+- **NEVER write tests** that depend on external services
+
+### Test Examples
+```python
+# ✅ GOOD - Comprehensive unit test
+import pytest
+from unittest.mock import Mock, patch
+from src.scrapers.core_scraper import CoreScraper
+from src.models.qb_models import PlayerStats
+
+class TestCoreScraper:
+    """Test suite for CoreScraper class."""
+    
+    @pytest.fixture
+    def scraper(self):
+        """Create scraper instance for testing."""
+        return CoreScraper(rate_limit=0.1)  # Faster for tests
+    
+    @pytest.fixture
+    def mock_response(self):
+        """Mock HTTP response with test data."""
+        mock = Mock()
+        mock.text = "<html>Test HTML</html>"
+        mock.status_code = 200
+        return mock
+    
+    def test_scrape_player_stats_success(self, scraper, mock_response):
+        """Test successful player stats scraping."""
+        with patch('requests.Session.get', return_value=mock_response):
+            result = scraper.scrape_player_stats("Joe Burrow", 2024)
+            
+        assert isinstance(result, PlayerStats)
+        assert result.player_name == "Joe Burrow"
+        assert result.season == 2024
+    
+    def test_scrape_player_stats_network_error(self, scraper):
+        """Test handling of network errors during scraping."""
+        with patch('requests.Session.get', side_effect=requests.ConnectionError):
+            with pytest.raises(ScrapingError, match="Network error"):
+                scraper.scrape_player_stats("Joe Burrow", 2024)
+
+# ❌ BAD - No tests or minimal tests
+def test_scraper():
+    """Test scraper."""
+    assert True  # Useless test
+```
+
+## Logging Standards
+
+### Structured Logging
+- **ALL operations** must use structured logging with context
+- **NEVER use print statements** - use proper logging levels
+- **ALWAYS include relevant metadata** in log messages
+- **ALL errors** must be logged with full context and stack traces
+- **NEVER log sensitive information** (passwords, API keys)
+
+### Logging Examples
+```python
+# ✅ GOOD - Structured logging
+import logging
+import time
+from typing import Dict, Any
+
+logger = logging.getLogger(__name__)
+
+def scrape_player_with_logging(player_name: str, season: int) -> PlayerStats:
+    """Scrape player with comprehensive logging."""
+    start_time = time.time()
+    
+    logger.info("Starting player scrape", extra={
+        "player_name": player_name,
+        "season": season,
+        "operation": "scrape_player"
+    })
+    
+    try:
+        stats = perform_scraping(player_name, season)
+        
+        duration = time.time() - start_time
+        logger.info("Player scrape completed", extra={
+            "player_name": player_name,
+            "season": season,
+            "duration_seconds": duration,
+            "completions": stats.completions,
+            "attempts": stats.attempts
+        })
+        
+        return stats
+        
+    except Exception as e:
+        logger.error("Player scrape failed", extra={
+            "player_name": player_name,
+            "season": season,
+            "error": str(e),
+            "error_type": type(e).__name__
+        }, exc_info=True)
+        raise
+
+# ❌ BAD - Print statements and poor logging
+def scrape_player_with_logging(player_name, season):
+    print(f"Scraping {player_name}")  # Don't use print
+    try:
+        stats = perform_scraping(player_name, season)
+        print("Done")
+        return stats
+    except Exception as e:
+        print(f"Error: {e}")  # No context, no traceback
+        raise
+```
+description:
+globs:
+alwaysApply: false
+---

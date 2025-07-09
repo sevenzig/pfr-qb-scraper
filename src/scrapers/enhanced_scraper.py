@@ -21,8 +21,8 @@ from dataclasses import dataclass
 from models.qb_models import Player, QBBasicStats, QBAdvancedStats, QBSplitStats, Team, ScrapingLog
 from utils.data_utils import (
     safe_int, safe_float, safe_percentage, clean_player_name, 
-    generate_player_id, calculate_passer_rating, normalize_split_type,
-    generate_session_id, calculate_processing_time
+    generate_player_id, generate_session_id, calculate_processing_time,
+    normalize_pfr_team_code
 )
 from config.config import config, SplitTypes, SplitCategories
 
@@ -182,6 +182,78 @@ class EnhancedPFRScraper:
         
         return None
     
+    def parse_simple_table(self, soup: BeautifulSoup, table_id: str) -> Optional[pd.DataFrame]:
+        """
+        Parse a simple HTML table (like main passing stats) to DataFrame
+        
+        Args:
+            soup: BeautifulSoup object
+            table_id: ID of the table to parse
+            
+        Returns:
+            DataFrame with table data or None if parsing failed
+        """
+        try:
+            # Find the table by ID
+            table = soup.find('table', {'id': table_id})
+            if not table:
+                logger.error(f"Table with ID '{table_id}' not found")
+                return None
+            
+            # Extract headers
+            headers = []
+            header_row = table.find('thead')
+            if header_row:
+                # Get headers from thead
+                th_elements = header_row.find_all('th')
+                headers = [th.get_text(strip=True) for th in th_elements]
+            else:
+                # Try to get headers from first row
+                first_row = table.find('tr')
+                if first_row:
+                    th_elements = first_row.find_all('th')
+                    headers = [th.get_text(strip=True) for th in th_elements]
+            
+            if not headers:
+                logger.error("No headers found in table")
+                return None
+            
+            logger.debug(f"Found headers: {headers}")
+            
+            # Extract data rows
+            tbody = table.find('tbody')
+            if tbody:
+                rows = tbody.find_all('tr')
+            else:
+                # Skip first row if it contains headers
+                all_rows = table.find_all('tr')
+                rows = all_rows[1:] if all_rows and all_rows[0].find('th') else all_rows
+            
+            data = []
+            for row in rows:
+                # Skip header rows within tbody
+                if row.find('th') and row.get('class') and 'thead' in row.get('class'):
+                    continue
+                
+                cells = row.find_all(['td', 'th'])
+                if len(cells) >= len(headers):
+                    row_data = [cell.get_text(strip=True) for cell in cells[:len(headers)]]
+                    data.append(row_data)
+            
+            if not data:
+                logger.warning("No data rows found in table")
+                return None
+            
+            # Create DataFrame
+            df = pd.DataFrame(data, columns=headers)
+            logger.debug(f"Successfully parsed simple table '{table_id}' with {len(df)} rows and {len(df.columns)} columns")
+            
+            return df
+            
+        except Exception as e:
+            logger.error(f"Error parsing simple table data: {e}")
+            return None
+
     def parse_table_data(self, soup: BeautifulSoup, table_id: str) -> Optional[pd.DataFrame]:
         """
         Parse HTML table data manually using BeautifulSoup to preserve original structure
@@ -554,7 +626,7 @@ class EnhancedPFRScraper:
         
         return False
     
-    def get_qb_main_stats(self, season: int) -> Tuple[List[Player], List[QBBasicStats], List[QBAdvancedStats]]:
+    def get_qb_main_stats(self, season: int) -> Tuple[List[Player], List[QBBasicStats]]:
         """
         Scrape main QB statistics for a given season
         
@@ -572,7 +644,7 @@ class EnhancedPFRScraper:
             return []
         
         soup = BeautifulSoup(response.content, 'html.parser')
-        df = self.parse_table_data(soup, 'passing')
+        df = self.parse_simple_table(soup, 'passing')
         
         if df is None:
             logger.error(f"Failed to parse QB stats table for {season}")
@@ -580,22 +652,22 @@ class EnhancedPFRScraper:
         
         players_list = []
         basic_stats_list = []
-        advanced_stats_list = []
         current_time = datetime.now()
         
         for _, row in df.iterrows():
             try:
                 # Skip header rows and empty rows
-                if row.get('Player', '') == 'Player' or not row.get('Player'):
+                player_value = str(row.get('Player', ''))
+                if player_value == 'Player' or not player_value:
                     continue
                 
                 # Filter for QBs only - check position column
-                position = row.get('Pos', '').strip().upper()
+                position = str(row.get('Pos', '')).strip().upper()
                 if position != 'QB':
                     continue
                 
                 # Extract player name and generate PFR ID
-                player_name = clean_player_name(row.get('Player', ''))
+                player_name = clean_player_name(player_value)
                 if not player_name:
                     continue
                 
@@ -612,61 +684,74 @@ class EnhancedPFRScraper:
                     updated_at=current_time
                 )
                 
-                # Create QBBasicStats object
+                # Create QBBasicStats object (using actual PFR column names)
+                # Get yards value - handle duplicate 'Yds' columns
+                yds_value = row.get('Yds', '0')
+                if isinstance(yds_value, pd.Series):
+                    yds_value = yds_value.iloc[0] if len(yds_value) > 0 else '0'
+                
+                team_code = normalize_pfr_team_code(str(row.get('Team', '')))
                 basic_stats = QBBasicStats(
                     pfr_id=pfr_id,
+                    player_name=player_name,
+                    player_url=player_url or '',
                     season=season,
-                    team=row.get('Tm', ''),
-                    games_played=safe_int(row.get('G', '0')),
-                    games_started=safe_int(row.get('GS', '0')),
-                    completions=safe_int(row.get('Cmp', '0')),
-                    attempts=safe_int(row.get('Att', '0')),
-                    completion_pct=safe_percentage(row.get('Cmp%', '0')),
-                    pass_yards=safe_int(row.get('Yds', '0')),
-                    pass_tds=safe_int(row.get('TD', '0')),
-                    interceptions=safe_int(row.get('Int', '0')),
-                    longest_pass=safe_int(row.get('Lng', '0')),
-                    rating=safe_float(row.get('Rate', '0')),
-                    sacks=safe_int(row.get('Sk', '0')),
-                    sack_yards=safe_int(row.get('Yds.1', '0')),
-                    net_yards_per_attempt=safe_float(row.get('NY/A', '0')),
+                    rk=safe_int(str(row.get('Rk', '0'))),
+                    age=safe_int(str(row.get('Age', '0'))),
+                    team=team_code,
+                    pos=str(row.get('Pos', 'QB')),
+                    g=safe_int(str(row.get('G', '0'))),
+                    gs=safe_int(str(row.get('GS', '0'))),
+                    qb_rec=str(row.get('QBrec', '')),
+                    cmp=safe_int(str(row.get('Cmp', '0'))),
+                    att=safe_int(str(row.get('Att', '0'))),
+                    cmp_pct=safe_percentage(str(row.get('Cmp%', '0'))),
+                    yds=safe_int(str(yds_value)),
+                    td=safe_int(str(row.get('TD', '0'))),
+                    td_pct=safe_percentage(str(row.get('TD%', '0'))),
+                    int=safe_int(str(row.get('Int', '0'))),
+                    int_pct=safe_percentage(str(row.get('Int%', '0'))),
+                    first_downs=safe_int(str(row.get('1D', '0'))),
+                    succ_pct=safe_percentage(str(row.get('Succ%', '0'))),
+                    lng=safe_int(str(row.get('Lng', '0'))),
+                    y_a=safe_float(str(row.get('Y/A', '0'))),
+                    ay_a=safe_float(str(row.get('AY/A', '0'))),
+                    y_c=safe_float(str(row.get('Y/C', '0'))),
+                    y_g=safe_float(str(row.get('Y/G', '0'))),
+                    rate=safe_float(str(row.get('Rate', '0'))),
+                    qbr=safe_float(str(row.get('QBR', '') if row.get('QBR') is not None else '')),
+                    sk=safe_int(str(row.get('Sk', '0'))),
+                    sk_yds=safe_int(str(row.get('Yds.1', '0'))),
+                    sk_pct=safe_percentage(str(row.get('Sk%', '0'))),
+                    ny_a=safe_float(str(row.get('NY/A', '0'))),
+                    any_a=safe_float(str(row.get('ANY/A', '0'))),
+                    four_qc=safe_int(str(row.get('4QC', '0'))),
+                    gwd=safe_int(str(row.get('GWD', '0'))),
+                    awards=str(row.get('Awards', '')),
+                    player_additional=str(row.get('player_additional', '')),
                     scraped_at=current_time,
                     updated_at=current_time
                 )
                 
-                # Create QBAdvancedStats object
-                advanced_stats = QBAdvancedStats(
-                    pfr_id=pfr_id,
-                    season=season,
-                    qbr=safe_float(row.get('QBR', None)),
-                    adjusted_net_yards_per_attempt=safe_float(row.get('ANY/A', '0')),
-                    fourth_quarter_comebacks=safe_int(row.get('4QC', '0')),
-                    game_winning_drives=safe_int(row.get('GWD', '0')),
-                    scraped_at=current_time,
-                    updated_at=current_time
-                )
-                
-                # Validate all objects
+                # Validate objects
                 player_errors = player.validate()
                 basic_errors = basic_stats.validate()
-                advanced_errors = advanced_stats.validate()
                 
-                all_errors = player_errors + basic_errors + advanced_errors
+                all_errors = player_errors + basic_errors
                 if all_errors:
                     for error in all_errors:
                         self.metrics.add_warning(f"Validation error for {player_name}: {error}")
                 
-                # Store all objects
+                # Store objects
                 players_list.append(player)
                 basic_stats_list.append(basic_stats)
-                advanced_stats_list.append(advanced_stats)
                 
             except Exception as e:
                 self.metrics.add_error(f"Error processing QB stats row: {e}")
                 continue
         
-        logger.info(f"Successfully scraped {len(players_list)} QB players with basic and advanced stats for {season}")
-        return players_list, basic_stats_list, advanced_stats_list
+        logger.info(f"Successfully scraped {len(players_list)} QB players with basic stats for {season}")
+        return players_list, basic_stats_list
     
     def find_player_url(self, player_name: str) -> Optional[str]:
         """

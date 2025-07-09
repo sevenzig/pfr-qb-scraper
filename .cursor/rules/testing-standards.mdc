@@ -1,0 +1,709 @@
+# Testing Standards
+*Comprehensive testing requirements for migration and ongoing development*
+
+## Unit Testing Requirements
+
+### Coverage and Quality Standards
+- **ALL new functions** must have corresponding unit tests
+- **NEVER commit code** without tests - minimum 85% coverage
+- **ALWAYS test both success and failure** scenarios
+- **ALL database operations** must be tested with mock connections
+- **NEVER use production database** for testing
+- **ALL tests must be fast** (< 1 second each)
+- **NEVER write tests** that depend on external services
+
+### Unit Test Structure
+```python
+# ✅ GOOD - Comprehensive unit test structure
+import pytest
+from unittest.mock import Mock, patch, MagicMock
+from typing import List, Dict, Any
+import requests
+from src.core.scraper import CoreScraper
+from src.models.qb_models import PlayerStats
+from src.utils.exceptions import ScrapingError, ValidationError
+
+class TestCoreScraper:
+    """Test suite for CoreScraper class."""
+    
+    @pytest.fixture
+    def scraper(self):
+        """Create scraper instance for testing."""
+        config = Mock()
+        config.rate_limit = 0.1  # Faster for tests
+        config.timeout = 5
+        config.max_retries = 2
+        return CoreScraper(config)
+    
+    @pytest.fixture
+    def mock_html_response(self):
+        """Mock HTTP response with test HTML."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.text = """
+        <html>
+            <table id="passing">
+                <tr><td>Joe Burrow</td><td>250</td><td>380</td><td>3000</td></tr>
+            </table>
+        </html>
+        """
+        return mock_response
+    
+    def test_scrape_player_stats_success(self, scraper, mock_html_response):
+        """Test successful player stats scraping."""
+        with patch('requests.Session.get', return_value=mock_html_response):
+            result = scraper.scrape_player_stats("Joe Burrow", 2024)
+            
+        assert isinstance(result, PlayerStats)
+        assert result.player_name == "Joe Burrow"
+        assert result.season == 2024
+        assert result.completions == 250
+        assert result.attempts == 380
+        assert result.pass_yards == 3000
+    
+    def test_scrape_player_stats_network_error(self, scraper):
+        """Test handling of network errors during scraping."""
+        with patch('requests.Session.get', side_effect=requests.ConnectionError("Network error")):
+            with pytest.raises(ScrapingError, match="Network error"):
+                scraper.scrape_player_stats("Joe Burrow", 2024)
+    
+    def test_scrape_player_stats_timeout(self, scraper):
+        """Test handling of request timeouts."""
+        with patch('requests.Session.get', side_effect=requests.Timeout("Request timeout")):
+            with pytest.raises(ScrapingError, match="timeout"):
+                scraper.scrape_player_stats("Joe Burrow", 2024)
+    
+    def test_scrape_player_stats_invalid_html(self, scraper):
+        """Test handling of invalid HTML response."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.text = "<html><body>No stats table</body></html>"
+        
+        with patch('requests.Session.get', return_value=mock_response):
+            with pytest.raises(ScrapingError, match="No stats found"):
+                scraper.scrape_player_stats("Joe Burrow", 2024)
+    
+    @pytest.mark.parametrize("season,expected_error", [
+        (1800, "Invalid season"),
+        (2030, "Future season"),
+        ("2024", "Season must be integer"),
+        (None, "Season cannot be None"),
+    ])
+    def test_scrape_player_stats_invalid_season(self, scraper, season, expected_error):
+        """Test validation of season parameter."""
+        with pytest.raises(ValidationError, match=expected_error):
+            scraper.scrape_player_stats("Joe Burrow", season)
+    
+    def test_scrape_player_stats_rate_limiting(self, scraper):
+        """Test that rate limiting is enforced."""
+        with patch('requests.Session.get') as mock_get:
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.text = "<html>Test</html>"
+            
+            with patch('time.sleep') as mock_sleep:
+                # Make two requests quickly
+                scraper.scrape_player_stats("Player1", 2024)
+                scraper.scrape_player_stats("Player2", 2024)
+                
+                # Verify sleep was called for rate limiting
+                mock_sleep.assert_called()
+
+# ❌ BAD - Minimal test without proper coverage
+class TestCoreScraper:
+    def test_scraper(self):
+        """Test scraper."""
+        scraper = CoreScraper()
+        assert scraper is not None  # Useless assertion
+```
+
+## Integration Testing
+
+### Integration Test Requirements
+- **ALL CLI commands** must have integration tests
+- **NEVER skip testing** of database operations
+- **ALWAYS test with realistic data** volumes
+- **ALL scrapers** must be tested with mock HTTP responses
+- **NEVER commit without testing** complete workflows
+
+### Integration Test Examples
+```python
+# ✅ GOOD - Integration test with database
+import pytest
+import tempfile
+import os
+from src.cli.commands.scrape import ScrapeCommand
+from src.database.db_manager import DatabaseManager
+from src.config.settings import Settings
+
+class TestScrapeCommand:
+    """Integration tests for scrape command."""
+    
+    @pytest.fixture
+    def temp_db(self):
+        """Create temporary test database."""
+        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+            db_path = f.name
+        
+        # Create test database
+        settings = Settings(database_url=f"sqlite:///{db_path}")
+        db_manager = DatabaseManager(settings)
+        db_manager.create_tables()
+        
+        yield db_manager
+        
+        # Cleanup
+        os.unlink(db_path)
+    
+    def test_scrape_single_player_command(self, temp_db):
+        """Test scraping single player through CLI."""
+        command = ScrapeCommand(temp_db)
+        
+        # Mock the HTTP response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.text = self.get_joe_burrow_html()
+        
+        with patch('requests.Session.get', return_value=mock_response):
+            result = command.execute(['players', '--names', 'Joe Burrow', '--season', '2024'])
+        
+        assert result.success
+        assert result.players_processed == 1
+        assert result.players_successful == 1
+        
+        # Verify data was saved to database
+        stats = temp_db.get_player_stats('burrjo01', 2024)
+        assert stats is not None
+        assert stats.player_name == 'Joe Burrow'
+        assert stats.completions > 0
+    
+    def test_scrape_multiple_players_command(self, temp_db):
+        """Test scraping multiple players through CLI."""
+        command = ScrapeCommand(temp_db)
+        
+        with patch('requests.Session.get') as mock_get:
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.text = self.get_generic_player_html()
+            
+            result = command.execute([
+                'players', 
+                '--names', 'Joe Burrow,Patrick Mahomes,Josh Allen',
+                '--season', '2024'
+            ])
+        
+        assert result.success
+        assert result.players_processed == 3
+        assert result.players_successful == 3
+        
+        # Verify all players were saved
+        for pfr_id in ['burrjo01', 'mahopa01', 'allenjo02']:
+            stats = temp_db.get_player_stats(pfr_id, 2024)
+            assert stats is not None
+    
+    def test_scrape_with_database_error(self, temp_db):
+        """Test handling of database errors during scraping."""
+        command = ScrapeCommand(temp_db)
+        
+        # Mock database to raise error
+        with patch.object(temp_db, 'save_player_stats', side_effect=Exception("Database error")):
+            with patch('requests.Session.get') as mock_get:
+                mock_get.return_value.status_code = 200
+                mock_get.return_value.text = self.get_joe_burrow_html()
+                
+                result = command.execute(['players', '--names', 'Joe Burrow', '--season', '2024'])
+        
+        assert not result.success
+        assert "Database error" in result.error_message
+    
+    def get_joe_burrow_html(self) -> str:
+        """Get mock HTML for Joe Burrow."""
+        return """
+        <html>
+            <table id="passing">
+                <tr><td>Joe Burrow</td><td>250</td><td>380</td><td>3000</td></tr>
+            </table>
+        </html>
+        """
+
+# ❌ BAD - No integration testing
+def test_scrape_command():
+    """Test scrape command."""
+    assert True  # No actual integration testing
+```
+
+## Migration Phase Testing
+
+### Phase-Specific Test Requirements
+- **ALL migration phases** must have validation tests
+- **NEVER assume equivalence** - always verify with known data
+- **ALWAYS test with edge cases** (multi-team players, missing data)
+- **ALL performance claims** must be verified with benchmarks
+- **NEVER deploy without comprehensive validation**
+
+### Phase Validation Tests
+```python
+# ✅ GOOD - Phase validation testing
+import pytest
+from src.legacy.enhanced_qb_scraper import EnhancedQBScraper
+from src.core.scraper import CoreScraper
+from src.models.qb_models import PlayerStats
+
+class TestPhase2Migration:
+    """Tests to validate Phase 2 migration equivalence."""
+    
+    @pytest.fixture
+    def legacy_scraper(self):
+        """Create legacy scraper for comparison."""
+        return EnhancedQBScraper()
+    
+    @pytest.fixture
+    def new_scraper(self):
+        """Create new unified scraper."""
+        return CoreScraper()
+    
+    def test_scraper_equivalence_joe_burrow(self, legacy_scraper, new_scraper):
+        """Test that new scraper produces same results as legacy for Joe Burrow."""
+        # Use saved HTML response for consistency
+        with open('tests/fixtures/joe_burrow_2024.html', 'r') as f:
+            mock_html = f.read()
+        
+        with patch('requests.Session.get') as mock_get:
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.text = mock_html
+            
+            # Get results from both scrapers
+            legacy_result = legacy_scraper.scrape_player("Joe Burrow", 2024)
+            new_result = new_scraper.scrape_player_stats("Joe Burrow", 2024)
+        
+        # Verify equivalence
+        assert legacy_result.player_name == new_result.player_name
+        assert legacy_result.completions == new_result.completions
+        assert legacy_result.attempts == new_result.attempts
+        assert legacy_result.pass_yards == new_result.pass_yards
+        assert abs(legacy_result.rating - new_result.rating) < 0.1
+    
+    def test_scraper_performance_comparison(self, legacy_scraper, new_scraper):
+        """Test that new scraper performs as well as legacy."""
+        import time
+        
+        # Mock HTML response
+        with open('tests/fixtures/multiple_players.html', 'r') as f:
+            mock_html = f.read()
+        
+        with patch('requests.Session.get') as mock_get:
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.text = mock_html
+            
+            # Time legacy scraper
+            start_time = time.time()
+            legacy_results = [
+                legacy_scraper.scrape_player(name, 2024)
+                for name in ["Joe Burrow", "Patrick Mahomes", "Josh Allen"]
+            ]
+            legacy_time = time.time() - start_time
+            
+            # Time new scraper
+            start_time = time.time()
+            new_results = [
+                new_scraper.scrape_player_stats(name, 2024)
+                for name in ["Joe Burrow", "Patrick Mahomes", "Josh Allen"]
+            ]
+            new_time = time.time() - start_time
+        
+        # Verify performance is within 5% tolerance
+        performance_ratio = new_time / legacy_time
+        assert performance_ratio < 1.05, f"New scraper is {performance_ratio:.2%} slower than legacy"
+    
+    @pytest.mark.parametrize("player_name,season", [
+        ("Tim Boyle", 2024),  # Multi-team player
+        ("Baker Mayfield", 2023),  # Player with incomplete data
+        ("Rookie Player", 2024),  # New player
+    ])
+    def test_edge_cases_equivalence(self, legacy_scraper, new_scraper, player_name, season):
+        """Test edge cases for scraper equivalence."""
+        # Test with various edge cases
+        pass  # Implementation would test specific edge cases
+
+# ❌ BAD - No migration validation
+def test_migration_phase2():
+    """Test migration phase 2."""
+    assert True  # No actual validation
+```
+
+## Test Data Management
+
+### Test Fixtures and Data
+- **Use realistic but anonymized** test data
+- **Create test fixtures** for common scenarios
+- **Implement data factories** for test object creation
+- **Use separate test databases** - never production
+- **Clean up test data** after each test
+
+### Test Data Examples
+```python
+# ✅ GOOD - Test data factories and fixtures
+import pytest
+from dataclasses import dataclass
+from typing import List, Dict
+from src.models.qb_models import PlayerStats
+
+@dataclass
+class TestPlayerData:
+    """Test data for player statistics."""
+    pfr_id: str
+    name: str
+    season: int
+    completions: int
+    attempts: int
+    pass_yards: int
+    rating: float
+
+class PlayerStatsFactory:
+    """Factory for creating test player stats."""
+    
+    @staticmethod
+    def create_joe_burrow_2024() -> PlayerStats:
+        """Create Joe Burrow 2024 stats for testing."""
+        return PlayerStats(
+            pfr_id="burrjo01",
+            player_name="Joe Burrow",
+            season=2024,
+            team="CIN",
+            completions=250,
+            attempts=380,
+            completion_pct=65.8,
+            pass_yards=3000,
+            pass_tds=18,
+            interceptions=8,
+            rating=95.2
+        )
+    
+    @staticmethod
+    def create_multi_team_player() -> List[PlayerStats]:
+        """Create multi-team player stats for testing."""
+        return [
+            PlayerStats(
+                pfr_id="boyltl01",
+                player_name="Tim Boyle",
+                season=2024,
+                team="MIA",
+                completions=12,
+                attempts=20,
+                pass_yards=120,
+                pass_tds=0,
+                interceptions=1,
+                rating=45.8
+            ),
+            PlayerStats(
+                pfr_id="boyltl01",
+                player_name="Tim Boyle",
+                season=2024,
+                team="NYG",
+                completions=8,
+                attempts=15,
+                pass_yards=80,
+                pass_tds=0,
+                interceptions=2,
+                rating=25.4
+            ),
+            PlayerStats(
+                pfr_id="boyltl01",
+                player_name="Tim Boyle",
+                season=2024,
+                team="2TM",
+                completions=20,
+                attempts=35,
+                pass_yards=200,
+                pass_tds=0,
+                interceptions=3,
+                rating=35.1
+            )
+        ]
+
+@pytest.fixture
+def joe_burrow_stats():
+    """Fixture for Joe Burrow test data."""
+    return PlayerStatsFactory.create_joe_burrow_2024()
+
+@pytest.fixture
+def multi_team_stats():
+    """Fixture for multi-team player test data."""
+    return PlayerStatsFactory.create_multi_team_player()
+
+@pytest.fixture
+def mock_html_responses():
+    """Fixture for mock HTML responses."""
+    return {
+        "joe_burrow": """
+        <table id="passing">
+            <tr><td>Joe Burrow</td><td>250</td><td>380</td><td>3000</td></tr>
+        </table>
+        """,
+        "patrick_mahomes": """
+        <table id="passing">
+            <tr><td>Patrick Mahomes</td><td>300</td><td>450</td><td>3500</td></tr>
+        </table>
+        """
+    }
+
+# ❌ BAD - Hardcoded test data scattered throughout tests
+def test_player_stats():
+    stats = PlayerStats(
+        pfr_id="burrjo01",
+        player_name="Joe Burrow",
+        # ... lots of hardcoded data
+    )
+    # Test duplicates this data structure everywhere
+```
+
+## Performance Testing
+
+### Performance Test Requirements
+- **ALL performance claims** must be verified with benchmarks
+- **NEVER deploy** without baseline performance metrics
+- **ALWAYS monitor** memory usage during large operations
+- **ALL database queries** must have performance validation
+- **NEVER ignore** performance regressions > 5%
+
+### Performance Test Examples
+```python
+# ✅ GOOD - Performance benchmarking
+import pytest
+import time
+import psutil
+import os
+from src.core.scraper import CoreScraper
+from src.operations.scraping_ops import ScrapingOperations
+
+class TestPerformance:
+    """Performance tests for scraping operations."""
+    
+    def test_scraping_performance_baseline(self):
+        """Test that scraping meets performance baseline."""
+        scraper = CoreScraper()
+        
+        # Mock response to eliminate network variability
+        with patch('requests.Session.get') as mock_get:
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.text = self.get_standard_html()
+            
+            # Benchmark scraping 10 players
+            start_time = time.time()
+            players = ["Player" + str(i) for i in range(10)]
+            
+            for player in players:
+                scraper.scrape_player_stats(player, 2024)
+            
+            total_time = time.time() - start_time
+        
+        # Should process 10 players in under 25 seconds (2.5s per player with rate limiting)
+        assert total_time < 25.0, f"Scraping took {total_time:.2f}s, expected < 25s"
+    
+    def test_memory_usage_during_bulk_scraping(self):
+        """Test memory usage during bulk scraping operations."""
+        scraper = CoreScraper()
+        process = psutil.Process(os.getpid())
+        
+        # Get initial memory usage
+        initial_memory = process.memory_info().rss / 1024 / 1024  # MB
+        
+        with patch('requests.Session.get') as mock_get:
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.text = self.get_standard_html()
+            
+            # Scrape 100 players
+            for i in range(100):
+                scraper.scrape_player_stats(f"Player{i}", 2024)
+        
+        # Check final memory usage
+        final_memory = process.memory_info().rss / 1024 / 1024  # MB
+        memory_increase = final_memory - initial_memory
+        
+        # Memory increase should be reasonable (< 100MB for 100 players)
+        assert memory_increase < 100, f"Memory increased by {memory_increase:.2f}MB, expected < 100MB"
+    
+    def test_database_query_performance(self, temp_db):
+        """Test database query performance."""
+        # Insert test data
+        test_players = [PlayerStatsFactory.create_test_player(i) for i in range(1000)]
+        temp_db.bulk_insert_players(test_players)
+        
+        # Test query performance
+        start_time = time.time()
+        results = temp_db.get_players_by_season(2024)
+        query_time = time.time() - start_time
+        
+        # Query should complete in under 100ms
+        assert query_time < 0.1, f"Query took {query_time:.3f}s, expected < 0.1s"
+        assert len(results) == 1000
+
+# ❌ BAD - No performance testing
+def test_performance():
+    """Test performance."""
+    # No actual performance measurement
+    pass
+```
+
+## Test Organization and Structure
+
+### Test File Organization
+```
+tests/
+├── unit/
+│   ├── test_core/
+│   │   ├── test_scraper.py
+│   │   ├── test_aggregator.py
+│   │   └── test_validator.py
+│   ├── test_operations/
+│   │   ├── test_scraping_ops.py
+│   │   ├── test_data_ops.py
+│   │   └── test_setup_ops.py
+│   └── test_utils/
+│       ├── test_data_utils.py
+│       └── test_error_handling.py
+├── integration/
+│   ├── test_cli/
+│   │   ├── test_scrape_command.py
+│   │   ├── test_data_command.py
+│   │   └── test_setup_command.py
+│   ├── test_database/
+│   │   ├── test_db_operations.py
+│   │   └── test_migrations.py
+│   └── test_workflows/
+│       ├── test_full_scraping.py
+│       └── test_migration_phases.py
+├── performance/
+│   ├── test_scraping_performance.py
+│   ├── test_database_performance.py
+│   └── test_memory_usage.py
+├── fixtures/
+│   ├── test_data/
+│   │   ├── joe_burrow_2024.json
+│   │   ├── multi_team_players.json
+│   │   └── error_cases.json
+│   └── mock_responses/
+│       ├── joe_burrow_html.html
+│       ├── patrick_mahomes_html.html
+│       └── error_page.html
+└── conftest.py  # Shared fixtures
+```
+
+### Test Configuration
+```python
+# ✅ GOOD - Test configuration
+# conftest.py
+import pytest
+import tempfile
+import os
+from src.database.db_manager import DatabaseManager
+from src.config.settings import Settings
+
+@pytest.fixture(scope="session")
+def test_settings():
+    """Test settings configuration."""
+    return Settings(
+        database_url="sqlite:///:memory:",
+        rate_limit_delay=0.01,  # Faster for tests
+        max_retries=2,
+        timeout=5,
+        log_level="DEBUG"
+    )
+
+@pytest.fixture(scope="function")
+def temp_db(test_settings):
+    """Create temporary database for each test."""
+    db_manager = DatabaseManager(test_settings)
+    db_manager.create_tables()
+    yield db_manager
+    db_manager.close()
+
+@pytest.fixture(autouse=True)
+def isolate_tests(monkeypatch):
+    """Isolate tests from external dependencies."""
+    # Mock external services
+    monkeypatch.setenv("TESTING", "true")
+    
+# pytest.ini
+[tool:pytest]
+testpaths = tests
+python_files = test_*.py
+python_classes = Test*
+python_functions = test_*
+addopts = 
+    --verbose
+    --cov=src
+    --cov-report=html
+    --cov-report=term-missing
+    --cov-fail-under=85
+    --durations=10
+markers =
+    slow: marks tests as slow (deselect with '-m "not slow"')
+    integration: marks tests as integration tests
+    performance: marks tests as performance tests
+```
+
+## Test Execution and CI
+
+### Continuous Integration Testing
+```yaml
+# ✅ GOOD - CI test configuration
+# .github/workflows/tests.yml
+name: Tests
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+    
+    - name: Run linting
+      run: |
+        flake8 src tests
+        black --check src tests
+        isort --check-only src tests
+        mypy src
+    
+    - name: Run unit tests
+      run: |
+        pytest tests/unit/ -v --cov=src --cov-report=xml
+    
+    - name: Run integration tests
+      run: |
+        pytest tests/integration/ -v
+    
+    - name: Run performance tests
+      run: |
+        pytest tests/performance/ -v -m "not slow"
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+```
+
+### Test Quality Gates
+- **Minimum 85% code coverage** required
+- **All tests must pass** before merge
+- **No performance regressions** > 5%
+- **Type checking** must pass
+- **Linting** must pass
+
+This comprehensive testing strategy ensures code quality, validates migration equivalence, and maintains performance standards throughout the development process.
+description:
+globs:
+alwaysApply: false
+---

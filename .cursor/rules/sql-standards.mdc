@@ -1,0 +1,480 @@
+# SQL Code Quality Standards
+*Ensure robust, secure, and performant database operations*
+
+## Schema Design Rules
+
+### Primary Key Requirements
+- **ALL tables** must have proper primary keys (prefer PFR IDs)
+- **ALWAYS use appropriate data types** (DECIMAL for money, TIMESTAMP for dates)
+- **NEVER use VARCHAR** without length limits
+- **ALL foreign keys** must have proper CASCADE/RESTRICT rules
+- **ALWAYS include meaningful constraints** (CHECK, UNIQUE, NOT NULL)
+
+### Schema Design Examples
+```sql
+-- ✅ GOOD - Proper table design
+CREATE TABLE players (
+    pfr_id VARCHAR(20) PRIMARY KEY,  -- PFR unique ID
+    player_name VARCHAR(100) NOT NULL,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    position VARCHAR(5) DEFAULT 'QB',
+    height_inches INTEGER CHECK (height_inches > 0 AND height_inches < 100),
+    weight_lbs INTEGER CHECK (weight_lbs > 0 AND weight_lbs < 500),
+    birth_date DATE,
+    college VARCHAR(100),
+    draft_year INTEGER CHECK (draft_year >= 1936 AND draft_year <= EXTRACT(YEAR FROM CURRENT_DATE)),
+    pfr_url VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Additional constraints
+    CONSTRAINT valid_position CHECK (position IN ('QB', 'RB', 'WR', 'TE', 'K', 'DEF')),
+    CONSTRAINT valid_name CHECK (LENGTH(player_name) > 0),
+    CONSTRAINT unique_pfr_url UNIQUE (pfr_url)
+);
+
+-- ❌ BAD - Poor table design
+CREATE TABLE players (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR,  -- No length limit
+    height INTEGER,  -- No constraints
+    weight INTEGER,  -- No constraints
+    url VARCHAR  -- No constraints, not unique
+);
+```
+
+### Index Strategy
+- **Add meaningful indexes** for query performance
+- **Use composite indexes** for multi-column queries
+- **Include indexes** for foreign key columns
+- **Avoid over-indexing** - balance query performance with write performance
+
+```sql
+-- ✅ GOOD - Strategic indexing
+CREATE INDEX idx_qb_basic_stats_season_rating ON qb_basic_stats(season, rating DESC);
+CREATE INDEX idx_qb_basic_stats_player_season ON qb_basic_stats(pfr_id, season);
+CREATE INDEX idx_qb_basic_stats_team_season ON qb_basic_stats(team, season);
+CREATE INDEX idx_qb_splits_player_season_type ON qb_splits(pfr_id, season, split_type);
+
+-- ❌ BAD - No indexes or over-indexing
+-- No indexes at all
+-- OR
+CREATE INDEX idx_every_column ON table_name(col1, col2, col3, col4, col5);  -- Too many columns
+```
+
+## Query Standards
+
+### Parameterized Queries
+- **ALL queries** must use parameterized statements (no string concatenation)
+- **NEVER use SELECT \*** in production code
+- **ALWAYS use proper JOIN syntax** (no comma joins)
+- **ALL complex queries** must have EXPLAIN plans validated
+- **NEVER commit queries** without proper indexing consideration
+
+### Query Examples
+```sql
+-- ✅ GOOD - Parameterized query with proper structure
+SELECT 
+    p.player_name,
+    p.pfr_id,
+    qbs.season,
+    qbs.completions,
+    qbs.attempts,
+    qbs.completion_pct,
+    qbs.pass_yards,
+    qbs.rating
+FROM players p
+INNER JOIN qb_basic_stats qbs ON p.pfr_id = qbs.pfr_id
+WHERE qbs.season = $1 
+    AND qbs.rating > $2
+    AND p.position = 'QB'
+ORDER BY qbs.rating DESC
+LIMIT $3;
+
+-- ❌ BAD - String concatenation and poor structure
+SELECT * FROM players, qb_basic_stats 
+WHERE players.pfr_id = qb_basic_stats.pfr_id 
+    AND qb_basic_stats.season = " + str(season) + "
+    AND qb_basic_stats.rating > " + str(min_rating);
+```
+
+### Query Optimization
+- **Use LIMIT** for potentially large result sets
+- **Prefer JOINs** over subqueries when possible
+- **Include proper WHERE clause** ordering
+- **Use EXPLAIN** to analyze query performance
+
+```sql
+-- ✅ GOOD - Optimized query
+EXPLAIN ANALYZE
+SELECT 
+    p.player_name,
+    qbs.rating,
+    qbs.pass_yards
+FROM players p
+INNER JOIN qb_basic_stats qbs ON p.pfr_id = qbs.pfr_id
+WHERE qbs.season = $1
+    AND qbs.games_started >= $2  -- Most selective condition first
+    AND p.position = 'QB'
+ORDER BY qbs.rating DESC
+LIMIT 25;
+
+-- ❌ BAD - Unoptimized query
+SELECT *
+FROM players p, qb_basic_stats qbs
+WHERE p.pfr_id = qbs.pfr_id
+    AND p.position = 'QB'  -- Less selective condition first
+    AND qbs.season = $1
+    AND qbs.games_started >= $2;
+```
+
+## Migration Safety
+
+### Schema Changes During Migration
+- **ALL schema changes** must be backwards compatible during migration
+- **NEVER drop tables** during Phases 1-3 - only add or modify
+- **ALWAYS backup database** before schema changes
+- **ALL migrations** must be tested on copy of production data
+- **NEVER modify existing data** without validation scripts
+
+### Safe Migration Patterns
+```sql
+-- ✅ GOOD - Safe migration (Phase 1-3)
+-- Add new column with default
+ALTER TABLE qb_basic_stats 
+ADD COLUMN fourth_quarter_comebacks INTEGER DEFAULT 0;
+
+-- Add new index
+CREATE INDEX CONCURRENTLY idx_qb_basic_stats_comebacks 
+ON qb_basic_stats(fourth_quarter_comebacks) 
+WHERE fourth_quarter_comebacks > 0;
+
+-- ❌ BAD - Unsafe migration (breaks existing code)
+-- Drop existing column
+ALTER TABLE qb_basic_stats DROP COLUMN rating;
+
+-- Rename table
+ALTER TABLE qb_basic_stats RENAME TO qb_season_stats;
+```
+
+### Data Migration Validation
+```sql
+-- ✅ GOOD - Validation before data changes
+-- Check data integrity before migration
+SELECT 
+    COUNT(*) as total_records,
+    COUNT(DISTINCT pfr_id) as unique_players,
+    MIN(season) as min_season,
+    MAX(season) as max_season,
+    SUM(CASE WHEN completions > attempts THEN 1 ELSE 0 END) as invalid_records
+FROM qb_basic_stats;
+
+-- Validate foreign key relationships
+SELECT COUNT(*) as orphaned_records
+FROM qb_basic_stats qbs
+LEFT JOIN players p ON qbs.pfr_id = p.pfr_id
+WHERE p.pfr_id IS NULL;
+```
+
+## Database Operations
+
+### Connection Management
+- **ALL database operations** must use connection pooling
+- **NEVER open connections** without proper cleanup (use context managers)
+- **ALWAYS use bulk operations** for inserting multiple records
+- **Handle database connection failures** gracefully
+
+### Connection Examples
+```python
+# ✅ GOOD - Connection pooling and context management
+from contextlib import contextmanager
+import psycopg2
+from psycopg2 import pool
+
+class DatabaseManager:
+    """Database connection manager with pooling."""
+    
+    def __init__(self, connection_string: str, min_connections: int = 1, max_connections: int = 10):
+        self.connection_pool = psycopg2.pool.ThreadedConnectionPool(
+            min_connections,
+            max_connections,
+            connection_string
+        )
+    
+    @contextmanager
+    def get_connection(self):
+        """Get connection from pool with proper cleanup."""
+        conn = self.connection_pool.getconn()
+        try:
+            yield conn
+        finally:
+            self.connection_pool.putconn(conn)
+    
+    def execute_query(self, query: str, params: tuple = None) -> List[Dict]:
+        """Execute query with proper error handling."""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(query, params)
+                if cursor.description:
+                    columns = [desc[0] for desc in cursor.description]
+                    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+                return []
+
+# ❌ BAD - No pooling, poor connection management
+def get_data():
+    conn = psycopg2.connect(connection_string)  # New connection each time
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM players")
+    data = cursor.fetchall()
+    # No cleanup - connections leak
+    return data
+```
+
+### Bulk Operations
+```python
+# ✅ GOOD - Bulk insert with conflict resolution
+def bulk_insert_players(players: List[PlayerStats]) -> None:
+    """Bulk insert players with conflict resolution."""
+    if not players:
+        return
+    
+    insert_query = """
+    INSERT INTO players (pfr_id, player_name, position, height_inches, weight_lbs, college, pfr_url)
+    VALUES %s
+    ON CONFLICT (pfr_id) DO UPDATE SET
+        player_name = EXCLUDED.player_name,
+        position = EXCLUDED.position,
+        height_inches = EXCLUDED.height_inches,
+        weight_lbs = EXCLUDED.weight_lbs,
+        college = EXCLUDED.college,
+        pfr_url = EXCLUDED.pfr_url,
+        updated_at = CURRENT_TIMESTAMP
+    """
+    
+    values = [
+        (p.pfr_id, p.player_name, p.position, p.height_inches, p.weight_lbs, p.college, p.pfr_url)
+        for p in players
+    ]
+    
+    with db_manager.get_connection() as conn:
+        with conn.cursor() as cursor:
+            psycopg2.extras.execute_values(cursor, insert_query, values)
+            conn.commit()
+
+# ❌ BAD - Individual inserts
+def insert_players(players):
+    for player in players:
+        cursor.execute(
+            "INSERT INTO players (pfr_id, player_name) VALUES (%s, %s)",
+            (player.pfr_id, player.player_name)
+        )  # No conflict resolution, no batching
+```
+
+## Transaction Management
+
+### Transaction Patterns
+- **Use transactions** for multi-step operations
+- **Include conflict resolution** for upsert operations
+- **Log database operations** with timing information
+- **Implement proper rollback** on failures
+
+```sql
+-- ✅ GOOD - Transaction with proper error handling
+BEGIN;
+
+-- Insert player if not exists
+INSERT INTO players (pfr_id, player_name, pfr_url)
+VALUES ($1, $2, $3)
+ON CONFLICT (pfr_id) DO UPDATE SET
+    player_name = EXCLUDED.player_name,
+    pfr_url = EXCLUDED.pfr_url,
+    updated_at = CURRENT_TIMESTAMP;
+
+-- Insert stats
+INSERT INTO qb_basic_stats (pfr_id, season, team, completions, attempts, pass_yards, rating)
+VALUES ($1, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (pfr_id, season) DO UPDATE SET
+    team = EXCLUDED.team,
+    completions = EXCLUDED.completions,
+    attempts = EXCLUDED.attempts,
+    pass_yards = EXCLUDED.pass_yards,
+    rating = EXCLUDED.rating,
+    updated_at = CURRENT_TIMESTAMP;
+
+COMMIT;
+```
+
+## Data Integrity
+
+### Constraint Design
+- **Use NOT NULL** where appropriate
+- **Add check constraints** for data validation
+- **Implement proper foreign key** relationships
+- **Design for data consistency** and referential integrity
+
+```sql
+-- ✅ GOOD - Comprehensive constraints
+CREATE TABLE qb_basic_stats (
+    pfr_id VARCHAR(20) NOT NULL,
+    season INTEGER NOT NULL,
+    team VARCHAR(3) NOT NULL,
+    games_played INTEGER DEFAULT 0 CHECK (games_played >= 0 AND games_played <= 20),
+    games_started INTEGER DEFAULT 0 CHECK (games_started >= 0 AND games_started <= games_played),
+    completions INTEGER DEFAULT 0 CHECK (completions >= 0),
+    attempts INTEGER DEFAULT 0 CHECK (attempts >= 0),
+    completion_pct DECIMAL(5,2) CHECK (completion_pct >= 0 AND completion_pct <= 100),
+    pass_yards INTEGER DEFAULT 0 CHECK (pass_yards >= 0),
+    pass_tds INTEGER DEFAULT 0 CHECK (pass_tds >= 0),
+    interceptions INTEGER DEFAULT 0 CHECK (interceptions >= 0),
+    rating DECIMAL(5,2) CHECK (rating >= 0 AND rating <= 158.3),
+    
+    -- Logical constraints
+    CONSTRAINT valid_completion_ratio CHECK (attempts = 0 OR completions <= attempts),
+    CONSTRAINT valid_games_started CHECK (games_started <= games_played),
+    
+    -- Foreign key constraints
+    FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE,
+    FOREIGN KEY (team) REFERENCES teams(team_code) ON DELETE RESTRICT,
+    
+    PRIMARY KEY (pfr_id, season)
+);
+
+-- ❌ BAD - No constraints
+CREATE TABLE qb_basic_stats (
+    pfr_id VARCHAR(20),
+    season INTEGER,
+    completions INTEGER,
+    attempts INTEGER
+    -- No constraints, no foreign keys
+);
+```
+
+## Performance Monitoring
+
+### Query Performance
+- **ALL queries** must have appropriate indexes for expected usage patterns
+- **NEVER commit** without checking query performance impact
+- **Monitor query execution times** in production
+- **Use EXPLAIN ANALYZE** for complex queries
+
+```sql
+-- ✅ GOOD - Performance monitoring query
+-- Check for slow queries
+SELECT 
+    query,
+    calls,
+    total_time,
+    mean_time,
+    rows
+FROM pg_stat_statements
+WHERE mean_time > 100  -- Queries taking > 100ms on average
+ORDER BY total_time DESC
+LIMIT 10;
+
+-- Check index usage
+SELECT 
+    schemaname,
+    tablename,
+    indexname,
+    idx_scan,
+    idx_tup_read,
+    idx_tup_fetch
+FROM pg_stat_user_indexes
+WHERE idx_scan = 0  -- Unused indexes
+ORDER BY schemaname, tablename;
+```
+
+### Database Monitoring
+```sql
+-- ✅ GOOD - Database health monitoring
+-- Check connection usage
+SELECT 
+    datname,
+    numbackends,
+    xact_commit,
+    xact_rollback,
+    blks_read,
+    blks_hit,
+    tup_returned,
+    tup_fetched
+FROM pg_stat_database
+WHERE datname = 'your_database';
+
+-- Check table statistics
+SELECT 
+    schemaname,
+    tablename,
+    n_tup_ins,
+    n_tup_upd,
+    n_tup_del,
+    n_live_tup,
+    n_dead_tup,
+    last_vacuum,
+    last_autovacuum,
+    last_analyze,
+    last_autoanalyze
+FROM pg_stat_user_tables
+ORDER BY n_live_tup DESC;
+```
+
+## Security Best Practices
+
+### SQL Injection Prevention
+- **ALWAYS use parameterized queries** - never string concatenation
+- **Validate all inputs** before database operations
+- **Use least privilege** database connections
+- **Never expose internal details** in error messages
+
+### Security Examples
+```python
+# ✅ GOOD - Parameterized query
+def get_player_stats(pfr_id: str, season: int) -> Optional[PlayerStats]:
+    """Get player stats with parameterized query."""
+    query = """
+    SELECT pfr_id, season, completions, attempts, pass_yards, rating
+    FROM qb_basic_stats
+    WHERE pfr_id = %s AND season = %s
+    """
+    
+    with db_manager.get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(query, (pfr_id, season))
+            row = cursor.fetchone()
+            return PlayerStats.from_row(row) if row else None
+
+# ❌ BAD - SQL injection vulnerable
+def get_player_stats(pfr_id, season):
+    query = f"SELECT * FROM qb_basic_stats WHERE pfr_id = '{pfr_id}' AND season = {season}"
+    cursor.execute(query)  # SQL injection vulnerability
+    return cursor.fetchone()
+```
+
+## Database Documentation
+
+### Schema Documentation
+- **ALL tables** must have comments describing purpose
+- **Complex columns** must have explanatory comments
+- **Business rules** must be documented in schema
+- **Index purposes** must be documented
+
+```sql
+-- ✅ GOOD - Well-documented schema
+COMMENT ON TABLE qb_basic_stats IS 'Basic season statistics for NFL quarterbacks';
+COMMENT ON COLUMN qb_basic_stats.pfr_id IS 'Pro Football Reference unique player identifier';
+COMMENT ON COLUMN qb_basic_stats.completion_pct IS 'Completion percentage (0-100)';
+COMMENT ON COLUMN qb_basic_stats.rating IS 'NFL passer rating (0-158.3)';
+COMMENT ON INDEX idx_qb_basic_stats_season_rating IS 'Optimize queries for season leaderboards';
+
+-- ❌ BAD - No documentation
+CREATE TABLE qb_basic_stats (
+    pfr_id VARCHAR(20),
+    season INTEGER,
+    rating DECIMAL(5,2)
+    -- No comments explaining purpose or constraints
+);
+```
+description:
+globs:
+alwaysApply: false
+---

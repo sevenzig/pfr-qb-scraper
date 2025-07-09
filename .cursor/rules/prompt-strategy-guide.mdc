@@ -1,0 +1,511 @@
+# Prompt Strategy Guide for Migration
+*How to structure prompts for maximum effectiveness during the script-to-CLI migration*
+
+## Phase-Based Prompt Structure
+
+### Phase 1: Foundation - CLI Skeleton and Architecture
+
+#### 🎯 **Goal-Setting Prompt Template**
+```
+[BugFix-Migration-Phase1] I'm beginning Phase 1 of migrating scattered NFL QB scraping scripts to a unified CLI architecture.
+
+**Current State:**
+- 15+ scattered scripts in /scripts/ directory
+- Scripts: enhanced_qb_scraper.py, robust_qb_scraper.py, populate_teams.py, etc.
+- No unified entry point or consistent interface
+
+**Phase 1 Objective:**
+Create CLI skeleton and foundation without breaking existing scripts.
+
+**Requirements from .cursorrules:**
+- Follow Foundation phase standards (60% test coverage minimum)
+- Maintain backwards compatibility
+- Use proper module structure (src/cli/, src/core/, src/operations/)
+- CLI commands must inherit from BaseCommand class
+
+**Specific Task:**
+[Describe specific task here - see templates below]
+
+**Success Criteria:**
+- CLI help system is intuitive
+- Command routing is extensible  
+- Zero impact on existing workflows
+- Configuration system is functional
+
+**Constraints:**
+- DO NOT modify existing scripts
+- DO NOT break any current functionality
+- MUST pass Phase 1 validation tests
+```
+
+#### 📁 **CLI Architecture Creation Prompt**
+```
+[CLI-Architecture-v1] Create the initial CLI architecture following our migration rules.
+
+**Context:** 
+@.cursorrules @.cursor/rules/migration-process.mdc @.cursor/rules/cli-specific.mdc
+
+**Task:** 
+Set up the basic CLI structure with proper module organization:
+
+1. Create src/cli/main.py as single entry point
+2. Implement BaseCommand class that all commands inherit from  
+3. Set up command routing for: scrape, setup, data, validate
+4. Create help system with examples
+5. Implement configuration loading (file → env → CLI precedence)
+
+**Architecture Requirements:**
+- CLI handlers in src/cli/ (no business logic)
+- Core logic in src/core/
+- High-level operations in src/operations/
+- Proper dependency injection patterns
+- Extensible command registration system
+
+**Output Format:**
+- Complete file structure with initial implementations
+- Working --help system with examples
+- Basic command routing that can be extended
+- Configuration management system
+
+**Validation:**
+- Must pass: python -m pfr_scraper --help
+- Must show: available commands and examples
+- Must handle: invalid commands gracefully with suggestions
+```
+
+#### 🔧 **Configuration System Prompt**
+```
+[Config-System-v1] Implement centralized configuration system following our standards.
+
+**Context:**
+@.cursorrules @.cursor/rules/python-quality.mdc @.cursor/rules/cli-specific.mdc
+
+**Requirements:**
+- Support .pfr-scraper.yaml, pfr-scraper.toml config files
+- Environment variable overrides (PFR_RATE_LIMIT, PFR_DB_URL, etc.)
+- Command-line argument overrides (highest precedence)
+- Validation on startup with clear error messages
+- --show-config option to display current configuration
+
+**Implementation:**
+- Create src/config/settings.py with proper type hints
+- Use dataclasses for configuration objects
+- Implement configuration precedence hierarchy
+- Add validation with specific error messages
+- Support both development and production profiles
+
+**Backwards Compatibility:**
+- Create adapter for legacy script configurations
+- Don't break existing .env files or hardcoded values yet
+- Document migration path for users
+
+**Testing:**
+- Unit tests for configuration loading and precedence
+- Integration tests for CLI configuration options
+- Validation tests for invalid configurations
+```
+
+### Phase 2: Core Migration - Scraper Consolidation
+
+#### 🔄 **Scraper Equivalence Prompt**
+```
+[Core-Scraper-Migration-v1] Create unified CoreScraper equivalent to best existing scraper.
+
+**Context:**
+@.cursorrules @.cursor/rules/migration-process.mdc @.cursor/rules/python-quality.mdc
+
+**Migration Challenge:**
+Consolidate multiple scrapers while maintaining functional equivalence:
+- scripts/enhanced_qb_scraper.py (most feature-complete)
+- scripts/robust_qb_scraper.py (better error handling) 
+- scripts/nfl_qb_scraper.py (original implementation)
+
+**Phase 2 Standards:**
+- 70% test coverage minimum
+- Functional equivalence to enhanced_qb_scraper.py
+- Enhanced error handling from robust_qb_scraper.py
+- Performance within 10% of current best
+
+**Implementation Requirements:**
+- Create src/core/scraper.py with CoreScraper class
+- Extend from base scraper class following our patterns
+- Use new configuration system (src/config/settings.py)
+- Implement proper rate limiting (2s production, 0.01s testing)
+- Add comprehensive error handling with user-friendly messages
+
+**Validation Testing:**
+- Create equivalence tests using known data (Joe Burrow 2024)
+- Compare output with legacy enhanced_qb_scraper.py
+- Performance benchmarking against existing scrapers
+- Test edge cases: multi-team players, missing data, network errors
+
+**Backwards Compatibility:**
+- Keep all existing scrapers functional
+- Create facade pattern for legacy interfaces if needed
+- Document mapping: old script methods → new CLI commands
+```
+
+#### 🎯 **CLI Command Implementation Prompt**
+```
+[CLI-Commands-v1] Implement scrape commands using the new CoreScraper.
+
+**Context:**
+@.cursorrules @.cursor/rules/cli-specific.mdc @.cursor/rules/python-quality.mdc
+
+**Commands to Implement:**
+1. `pfr-scraper scrape players --names "Joe Burrow" --season 2024`
+2. `pfr-scraper scrape season --year 2024 --position QB`  
+3. `pfr-scraper scrape team --team CIN --season 2024`
+
+**CLI Standards:**
+- Commands inherit from BaseCommand
+- Comprehensive help text with examples
+- Input validation with user-friendly error messages
+- Progress indication for operations > 30 seconds
+- Multiple output formats (table, json, csv)
+- Graceful cancellation with Ctrl+C
+
+**Business Logic Separation:**
+- CLI handlers only parse arguments and format output
+- All scraping logic delegated to src/operations/scraping_ops.py
+- Error handling: user-friendly messages, no technical details
+- Logging: structured with operation context
+
+**User Experience:**
+- Tab completion for player names (if possible)
+- Helpful suggestions for typos
+- Examples in help text
+- Clear progress indication
+
+**Testing:**
+- Integration tests with mock HTTP responses
+- CLI argument parsing tests
+- Error handling and validation tests
+- Output format tests
+```
+
+### Phase 3: Advanced Features - Data Management
+
+#### 📊 **Data Operations Prompt**
+```
+[Data-Ops-v1] Implement advanced data management operations.
+
+**Context:**
+@.cursorrules @.cursor/rules/migration-process.mdc @.cursor/rules/sql-standards.mdc
+
+**Phase 3 Focus:**
+Advanced features with 80% test coverage requirement:
+- Multi-team player aggregation (2TM/3TM handling)
+- Data quality validation and reporting
+- Session management for resumable operations
+- Bulk operations with progress tracking
+
+**Commands to Implement:**
+1. `pfr-scraper data validate --season 2024 --fix-issues`
+2. `pfr-scraper data aggregate --player "Tim Boyle" --season 2024`
+3. `pfr-scraper data export --season 2024 --format csv`
+4. `pfr-scraper data cleanup --dry-run`
+
+**Technical Requirements:**
+- Handle multi-team players correctly (prefer 2TM over individual teams)
+- Detect and report data quality issues
+- Implement conflict resolution for duplicate data
+- Add session state management for long operations
+- Bulk database operations with proper error handling
+
+**User Experience:**
+- Clear progress indication with estimated time remaining
+- Resumable operations after interruption  
+- Detailed validation reports with actionable guidance
+- Dry-run options for destructive operations
+
+**Testing:**
+- Edge case testing with actual multi-team scenarios
+- Performance testing with large datasets
+- Data validation testing with corrupted data
+- Integration testing for complete workflows
+```
+
+#### 🔍 **Validation System Prompt**
+```
+[Validation-System-v1] Create comprehensive data validation and quality assurance.
+
+**Context:**
+@.cursorrules @.cursor/rules/python-quality.mdc @.cursor/rules/testing-standards.mdc
+
+**Validation Categories:**
+1. **Data Integrity**: completions ≤ attempts, valid rating ranges
+2. **Consistency**: player names, team codes, season ranges  
+3. **Completeness**: required fields, missing data detection
+4. **Business Rules**: NFL-specific constraints and validation
+
+**Implementation:**
+- Create src/operations/validation_ops.py
+- Implement ValidationEngine with configurable rules
+- Add ValidationReport class for detailed reporting
+- Create ValidationError hierarchy for different error types
+- Support batch validation with progress tracking
+
+**Validation Rules:**
+- QB rating between 0.0 and 158.3
+- Completion percentage ≤ 100%
+- Pass yards ≥ 0
+- Games started ≤ games played ≤ 17 (regular season)
+- Team codes match official NFL codes
+- Season years within valid range (1950-current)
+
+**User Interface:**
+- Interactive validation reports
+- Fix suggestions for common issues
+- Severity levels (error, warning, info)
+- Export validation reports to CSV/JSON
+
+**Testing:**
+- Unit tests for each validation rule
+- Integration tests with real data samples
+- Performance tests with large datasets
+- Edge case tests with boundary conditions
+```
+
+### Phase 4: Production Polish
+
+#### 🚀 **Production Readiness Prompt**
+```
+[Production-Ready-v1] Achieve production quality standards for final release.
+
+**Context:**
+@.cursorrules @.cursor/rules/enforcement.mdc ALL .cursor/rules/*.mdc files
+
+**Phase 4 Requirements:**
+- 85% test coverage across all modules
+- Full compliance with all quality standards
+- Complete documentation and user guides
+- Performance optimization and monitoring
+- Legacy deprecation and migration guides
+
+**Quality Checklist:**
+- [ ] All code passes mypy --strict
+- [ ] 85%+ test coverage with meaningful tests
+- [ ] All functions have comprehensive docstrings
+- [ ] Security scan passes (bandit, safety)
+- [ ] Performance benchmarks meet targets
+- [ ] User documentation is complete
+- [ ] Migration guides are tested
+
+**Legacy Deprecation:**
+- Move old scripts to legacy/ directory
+- Add deprecation warnings with migration instructions
+- Create wrapper scripts for smooth transition
+- Update all documentation to reference new CLI
+- Provide automated migration tools where possible
+
+**Production Features:**
+- Health check endpoints
+- Monitoring and alerting integration
+- Graceful shutdown handling
+- Resource cleanup and connection pooling
+- Error reporting and debugging tools
+
+**Release Validation:**
+- Complete end-to-end workflow testing
+- Performance regression testing
+- User acceptance testing with real workflows
+- Documentation accuracy verification
+- Deployment testing in production-like environment
+```
+
+## Context-Setting Patterns
+
+### 🎯 **Essential Context Template**
+Always include this context pattern:
+```
+**Context Files:**
+@.cursorrules                              # Core rules
+@.cursor/rules/migration-process.mdc       # Phase requirements
+@.cursor/rules/[relevant-specific].mdc     # Task-specific rules
+
+**Current Phase:** [Phase 1/2/3/4]
+**Migration Progress:** [Brief status update]
+**Previous Session:** [What was completed last]
+```
+
+### 📋 **Task Breakdown Pattern**
+For complex tasks:
+```
+**Primary Objective:** [Main goal]
+**Sub-tasks:**
+1. [Specific actionable item]
+2. [Another specific item]
+3. [Final specific item]
+
+**Dependencies:** [What needs to exist first]
+**Acceptance Criteria:** [How to verify success]
+**Constraints:** [What NOT to do]
+```
+
+### 🔧 **Implementation Pattern**
+For code generation:
+```
+**Architecture:** [Where this fits in the system]
+**Interfaces:** [What this needs to connect to]
+**Error Handling:** [Expected error scenarios]
+**Testing Strategy:** [How this will be tested]
+**Performance Considerations:** [Expected scale/load]
+```
+
+## Common Prompt Types
+
+### 🔍 **Analysis Prompts**
+```
+[Analysis-Current-State] Help me understand the current state before migration.
+
+**Context:** @scripts/ directory with all existing scripts
+
+**Analysis Needed:**
+1. Inventory all scraping scripts and their capabilities
+2. Identify overlapping functionality and inconsistencies
+3. Map current user workflows and dependencies
+4. Assess code quality and technical debt
+5. Identify migration risks and challenges
+
+**Output Format:**
+- Detailed script functionality matrix
+- User workflow documentation
+- Risk assessment with mitigation strategies
+- Recommended migration order and dependencies
+```
+
+### 🧪 **Testing Prompts**
+```
+[Test-Implementation-v1] Create comprehensive tests for [component].
+
+**Context:** 
+@.cursorrules @.cursor/rules/testing-standards.mdc
+@src/[component-path] # The code to test
+
+**Testing Requirements:**
+- Unit tests for all public methods
+- Integration tests for workflows
+- Performance tests for critical paths
+- Edge case tests for boundary conditions
+- Mock tests for external dependencies
+
+**Phase [X] Coverage Requirements:** [X]% minimum
+**Test Categories Needed:**
+- Happy path scenarios
+- Error handling scenarios  
+- Edge cases and boundary conditions
+- Performance and load testing
+- Integration and end-to-end testing
+```
+
+### 🐛 **Debugging Prompts**
+```
+[Debug-Issue-v1] Help me debug and fix [specific issue].
+
+**Context:**
+@.cursorrules @.cursor/rules/anti-patterns.mdc
+@[relevant-files] # Files related to the issue
+
+**Issue Description:**
+[Detailed description of the problem]
+
+**Current Behavior:**
+[What's happening now]
+
+**Expected Behavior:**
+[What should happen]
+
+**Error Messages/Logs:**
+[Any error output]
+
+**Migration Context:**
+- Current Phase: [X]
+- Recent Changes: [What was changed]
+- Related Components: [Other affected parts]
+
+**Debugging Approach:**
+- Check for anti-patterns from our rules
+- Verify phase-appropriate standards
+- Ensure migration compatibility
+- Validate against current architecture
+```
+
+### 📚 **Documentation Prompts**
+```
+[Documentation-v1] Create user documentation for [feature/command].
+
+**Context:**
+@.cursorrules @.cursor/rules/cli-specific.mdc
+@[relevant-implementation-files]
+
+**Documentation Type:** [User Guide / API Docs / Migration Guide]
+
+**Target Audience:** 
+- Current users of legacy scripts
+- New users learning the CLI
+- Developers maintaining the system
+
+**Required Sections:**
+- Clear examples with real data
+- Common use cases and workflows
+- Troubleshooting guide
+- Migration instructions from old scripts
+- Performance tips and best practices
+
+**Format Requirements:**
+- Consistent with existing documentation style
+- Include command examples with expected output
+- Cross-reference related commands
+- Provide both quick-start and comprehensive guides
+```
+
+## Prompt Optimization Tips
+
+### ✅ **Do This:**
+- **Reference specific rule files** with @.cursor/rules/filename.mdc
+- **Set clear phase context** - Phase standards matter
+- **Include success criteria** - How to verify completion
+- **Specify constraints** - What NOT to do during migration
+- **Provide examples** - Show expected input/output format
+- **Break down complex tasks** - One focus area per prompt
+
+### ❌ **Avoid This:**
+- **Vague objectives** - "Make it better" isn't actionable
+- **Multiple unrelated tasks** - Keep prompts focused
+- **Ignoring phase requirements** - Each phase has different standards
+- **Skipping context** - Always reference relevant rules
+- **No validation criteria** - Always specify how to verify success
+- **Forgetting backwards compatibility** - Critical during Phases 1-3
+
+## Session Management
+
+### 🔄 **Session Continuity Pattern**
+Start each new session with:
+```
+[Session-Context-v1] Continuing migration work from previous session.
+
+**Previous Progress:**
+- Completed: [What was finished]
+- Current Status: [Where we left off]
+- Next Steps: [What needs to happen next]
+
+**Current Phase:** [Phase X] with [Y]% coverage requirement
+**Active Files:** @[list of files being worked on]
+**Migration Rules:** @.cursorrules @.cursor/rules/[relevant].mdc
+
+**Today's Objective:** [Specific goal for this session]
+```
+
+This prompt strategy ensures that every interaction with Cursor AI is:
+- ✅ **Aligned with migration phases and rules**
+- ✅ **Focused on specific, achievable objectives**  
+- ✅ **Properly contextualized for quality outcomes**
+- ✅ **Structured for maintainable, testable code**
+- ✅ **Consistent with project architecture and standards**
+
+Start with Phase 1 Foundation prompts and work systematically through each phase! 🚀
+description:
+globs:
+alwaysApply: false
+---

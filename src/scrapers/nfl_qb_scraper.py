@@ -19,10 +19,8 @@ from .enhanced_scraper import EnhancedPFRScraper
 from database.db_manager import DatabaseManager
 from models.qb_models import QBBasicStats, QBAdvancedStats, QBSplitStats, Player, Team, ScrapingLog
 from utils.data_utils import (
-    generate_session_id, calculate_processing_time, 
-    log_data_quality_metrics
+    generate_session_id, calculate_processing_time
 )
-# Validation functions removed - not needed for single player scraping
 from config.config import config
 
 # Configure logging
@@ -105,13 +103,6 @@ class NFLQBDataPipeline:
                 qb_stats = self.scraper.get_qb_main_stats(season)
                 
                 if qb_stats:
-                    # Validate data quality
-                    validation_errors = validate_qb_stats_list(qb_stats)
-                    if validation_errors:
-                        for player, errors in validation_errors.items():
-                            for error in errors:
-                                results['warnings'].append(f"{player}: {error}")
-                    
                     # Insert main stats into database
                     inserted_count = self.db_manager.insert_qb_stats(qb_stats)
                     results['qb_stats_count'] = inserted_count
@@ -140,13 +131,6 @@ class NFLQBDataPipeline:
                 )
                 
                 if qb_splits:
-                    # Validate splits data quality
-                    splits_validation_errors = validate_qb_splits_list(qb_splits)
-                    if splits_validation_errors:
-                        for split_key, errors in splits_validation_errors.items():
-                            for error in errors:
-                                results['warnings'].append(f"{split_key}: {error}")
-                    
                     # Insert splits into database
                     inserted_count = self.db_manager.insert_qb_splits(qb_splits)
                     results['qb_splits_count'] = inserted_count

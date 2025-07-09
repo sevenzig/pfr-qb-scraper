@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 
 # Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from database.db_manager import DatabaseManager
 

@@ -1,0 +1,266 @@
+# NFL QB Scraper Migration Rules for Cursor AI
+# Enforce quality standards during script-to-CLI refactoring
+
+## MIGRATION PROCESS GUARDRAILS
+
+### Phase Compliance Rules
+- NEVER skip migration phases - follow Foundation → Core → Data → Polish sequence
+- ALWAYS maintain backwards compatibility until Phase 4 deprecation
+- NEVER break existing scripts during Phases 1-3
+- ALWAYS test each phase deliverable before proceeding to next phase
+- NEVER merge code without passing the phase-specific success criteria
+
+### Architecture Compliance
+- ALL new code must go in proper module structure (src/cli/, src/core/, src/operations/)
+- NEVER put business logic in CLI command handlers
+- ALWAYS use dependency injection patterns for testability
+- NEVER create circular dependencies between modules
+- ALWAYS follow single responsibility principle for classes and functions
+
+### Migration-Specific Patterns
+- NEW CLI commands must inherit from BaseCommand class
+- ALL scrapers must extend the unified CoreScraper class
+- NEVER duplicate existing functionality - consolidate instead
+- ALWAYS use the new configuration system (src/config/settings.py)
+- NEVER hardcode values - use configuration management
+
+## PYTHON CODE QUALITY STANDARDS
+
+### Type Safety Requirements
+- ALL functions must have complete type hints (args, returns, variables)
+- NEVER use 'any' type - use Union, Optional, or specific types
+- ALWAYS import from typing module properly
+- ALL dataclasses must use proper type annotations
+- NEVER skip type checking - must pass mypy validation
+
+### Error Handling Standards
+- NEVER use bare except clauses - always specify exception types
+- ALWAYS provide contextual error messages with relevant data
+- NEVER suppress errors silently - log and handle appropriately
+- ALL API calls must have proper retry logic with exponential backoff
+- ALWAYS use custom exception classes for domain-specific errors
+
+### Documentation Requirements
+- ALL public functions must have comprehensive docstrings
+- ALWAYS include Args, Returns, Raises sections in docstrings
+- NEVER omit examples in docstrings for complex functions
+- ALL classes must have class-level docstrings explaining purpose
+- ALWAYS update module-level docstrings when adding new functionality
+
+### Testing Requirements
+- ALL new functions must have corresponding unit tests
+- NEVER commit code without tests - minimum 85% coverage
+- ALWAYS test both success and failure scenarios
+- ALL database operations must be tested with mock connections
+- NEVER use production database for testing
+
+### Logging Standards
+- ALL operations must use structured logging with context
+- NEVER use print statements - use proper logging levels
+- ALWAYS include relevant metadata in log messages (player_name, season, etc.)
+- ALL errors must be logged with full context and stack traces
+- NEVER log sensitive information (passwords, API keys)
+
+## SQL CODE QUALITY STANDARDS
+
+### Schema Design Rules
+- ALL tables must have proper primary keys (prefer PFR IDs)
+- ALWAYS use appropriate data types (DECIMAL for money, TIMESTAMP for dates)
+- NEVER use VARCHAR without length limits
+- ALL foreign keys must have proper CASCADE/RESTRICT rules
+- ALWAYS include meaningful constraints (CHECK, UNIQUE, NOT NULL)
+
+### Query Standards
+- ALL queries must use parameterized statements (no string concatenation)
+- NEVER use SELECT * in production code
+- ALWAYS use proper JOIN syntax (no comma joins)
+- ALL complex queries must have EXPLAIN plans validated
+- NEVER commit queries without proper indexing consideration
+
+### Migration Safety
+- ALL schema changes must be backwards compatible during migration
+- NEVER drop tables during Phases 1-3 - only add or modify
+- ALWAYS backup database before schema changes
+- ALL migrations must be tested on copy of production data
+- NEVER modify existing data without validation scripts
+
+## PERFORMANCE STANDARDS
+
+### Scraping Performance
+- ALL scrapers must implement proper rate limiting (minimum 2 seconds between requests)
+- NEVER make concurrent requests without permission
+- ALWAYS implement request timeouts (30 seconds max)
+- ALL scraping operations must be resumable for long runs
+- NEVER scrape without progress tracking for operations > 30 seconds
+
+### Database Performance
+- ALL database operations must use connection pooling
+- NEVER open connections without proper cleanup (use context managers)
+- ALWAYS use bulk operations for inserting multiple records
+- ALL queries must have appropriate indexes for expected usage patterns
+- NEVER commit without checking query performance impact
+
+### Memory Management
+- ALL large datasets must be processed in streaming fashion
+- NEVER load entire datasets into memory at once
+- ALWAYS clean up resources (connections, files, etc.)
+- ALL long-running operations must have memory monitoring
+- NEVER create memory leaks in data processing pipelines
+
+## SECURITY STANDARDS
+
+### Data Protection
+- ALL sensitive data must use environment variables
+- NEVER hardcode database credentials or API keys
+- ALWAYS validate and sanitize external data inputs
+- ALL database queries must use parameterized statements
+- NEVER log sensitive information in plain text
+
+### Authentication & Authorization
+- ALL database connections must use secure authentication
+- NEVER use default or weak passwords
+- ALWAYS validate user inputs for injection attacks
+- ALL API endpoints must have proper authentication
+- NEVER expose internal system details in error messages
+
+## REFACTORING SPECIFIC RULES
+
+### Code Consolidation
+- WHEN combining multiple scripts, ALWAYS preserve all functionality
+- NEVER delete old scripts until new CLI commands are proven equivalent
+- ALWAYS create mapping document showing old script → new command
+- ALL consolidated code must maintain or improve performance
+- NEVER introduce regressions during consolidation
+
+### Configuration Management
+- ALL configuration must be centralized in src/config/settings.py
+- NEVER duplicate configuration values across modules
+- ALWAYS provide sensible defaults for optional settings
+- ALL configuration changes must be backwards compatible
+- NEVER hardcode environment-specific values
+
+### Legacy Support
+- ALL legacy scripts must continue working until Phase 4
+- NEVER remove legacy functionality without replacement
+- ALWAYS provide migration path for existing users
+- ALL breaking changes must be clearly documented
+- NEVER surprise users with sudden workflow changes
+
+## TESTING DURING MIGRATION
+
+### Unit Testing
+- ALL new modules must have comprehensive unit tests
+- NEVER mock what you don't own (external APIs, databases)
+- ALWAYS test edge cases and error conditions
+- ALL tests must be fast (< 1 second each)
+- NEVER write tests that depend on external services
+
+### Integration Testing
+- ALL CLI commands must have integration tests
+- NEVER skip testing of database operations
+- ALWAYS test with realistic data volumes
+- ALL scrapers must be tested with mock HTTP responses
+- NEVER commit without testing complete workflows
+
+### Validation Testing
+- ALL migration phases must have validation tests
+- NEVER assume equivalence - always verify with known data
+- ALWAYS test with edge cases (multi-team players, missing data)
+- ALL performance claims must be verified with benchmarks
+- NEVER deploy without comprehensive validation
+
+## DOCUMENTATION STANDARDS
+
+### Code Documentation
+- ALL modules must have comprehensive README sections
+- NEVER omit examples in function docstrings
+- ALWAYS document complex algorithms and business logic
+- ALL configuration options must be documented
+- NEVER assume users understand domain-specific concepts
+
+### User Documentation
+- ALL CLI commands must have help text with examples
+- NEVER create commands without usage documentation
+- ALWAYS provide troubleshooting guides for common issues
+- ALL migration steps must be documented for users
+- NEVER assume users can figure out new workflows
+
+### Development Documentation
+- ALL architecture decisions must be documented
+- NEVER make significant changes without updating docs
+- ALWAYS maintain API documentation for internal modules
+- ALL testing procedures must be documented
+- NEVER leave future developers guessing about design choices
+
+## CONTINUOUS INTEGRATION RULES
+
+### Pre-commit Requirements
+- ALL code must pass linting (flake8, black, isort)
+- NEVER commit code that doesn't pass type checking
+- ALWAYS run tests before committing
+- ALL commits must have meaningful messages
+- NEVER commit secrets or sensitive data
+
+### Build Pipeline
+- ALL builds must include comprehensive testing
+- NEVER deploy without passing all quality gates
+- ALWAYS include security scanning in pipeline
+- ALL performance regressions must be caught by CI
+- NEVER merge without code review approval
+
+### Quality Gates
+- ALL modules must maintain minimum 85% test coverage
+- NEVER merge code that reduces overall test coverage
+- ALWAYS validate that new code follows project patterns
+- ALL database migrations must be tested in CI
+- NEVER skip quality checks for "urgent" changes
+
+## PERFORMANCE MONITORING
+
+### Metrics to Track
+- ALL scraping operations must record timing and success rates
+- NEVER ignore performance regressions > 5%
+- ALWAYS monitor memory usage during large operations
+- ALL database queries must have performance monitoring
+- NEVER deploy without baseline performance metrics
+
+### Alerting
+- ALL critical failures must generate alerts
+- NEVER ignore recurring error patterns
+- ALWAYS monitor data quality metrics
+- ALL performance degradation must trigger investigation
+- NEVER let quality issues accumulate
+
+## SPECIFIC ANTI-PATTERNS TO AVOID
+
+### Code Smells
+- NEVER create god classes with > 10 methods
+- AVOID functions with > 50 lines or > 5 parameters
+- NEVER use global variables for state management
+- AVOID deep nesting (> 3 levels)
+- NEVER duplicate code - create shared utilities
+
+### Architecture Violations
+- NEVER put database queries in CLI command handlers
+- AVOID tight coupling between modules
+- NEVER create circular imports
+- AVOID exposing internal implementation details
+- NEVER bypass the established configuration system
+
+### Migration Mistakes
+- NEVER break existing functionality during migration
+- AVOID big-bang changes - always incremental
+- NEVER skip validation steps
+- AVOID feature creep during migration
+- NEVER ignore backwards compatibility requirements
+
+## ENFORCEMENT
+
+These rules are enforced through:
+- Pre-commit hooks for automated checking
+- Code review requirements
+- Continuous integration pipeline
+- Regular code quality audits
+- Migration phase gate reviews
+
+Violations should be caught early and addressed immediately to maintain project quality and migration success. 

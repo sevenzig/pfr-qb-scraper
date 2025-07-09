@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Data models for NFL QB statistics and related data
+Data models for NFL QB statistics - Raw Data Scraping
+Matches exact column structures from Pro Football Reference CSV exports
 """
 
 from dataclasses import dataclass, field
@@ -86,211 +87,172 @@ class Player:
 
 
 @dataclass
-class QBBasicStats:
-    """Data class for basic QB statistics (season totals)
-    
-    Attributes:
-        pfr_id: PFR unique player ID
-        player_name: Full player name (e.g., 'Joe Burrow')
-        player_url: URL to the player's PFR page
-        season: Season year
-        team: Team code
-        ... (other fields unchanged)
+class QBPassingStats:
     """
+    Raw QB passing statistics from 2024_passing.csv
+    Contains ALL columns from the CSV with no calculations
+    """
+    # Primary identifiers
     pfr_id: str
     player_name: str
     player_url: str
     season: int
-    team: str
-    games_played: int = 0
-    games_started: int = 0
-    completions: int = 0
-    attempts: int = 0
-    completion_pct: Optional[float] = None
-    pass_yards: int = 0
-    pass_tds: int = 0
-    interceptions: int = 0
-    longest_pass: int = 0
-    rating: Optional[float] = None
-    sacks: int = 0
-    sack_yards: int = 0
-    net_yards_per_attempt: Optional[float] = None
+    
+    # Raw CSV columns (matching 2024_passing.csv exactly)
+    rk: Optional[int] = None  # Rank
+    age: Optional[int] = None  # Age
+    team: Optional[str] = None  # Team
+    pos: Optional[str] = None  # Position
+    g: Optional[int] = None  # Games
+    gs: Optional[int] = None  # Games Started  
+    qb_rec: Optional[str] = None  # QB Record (W-L-T format)
+    cmp: Optional[int] = None  # Completions
+    att: Optional[int] = None  # Attempts
+    cmp_pct: Optional[float] = None  # Completion %
+    yds: Optional[int] = None  # Yards
+    td: Optional[int] = None  # Touchdowns
+    td_pct: Optional[float] = None  # TD %
+    int: Optional[int] = None  # Interceptions
+    int_pct: Optional[float] = None  # Int %
+    first_downs: Optional[int] = None  # 1D (First Downs)
+    succ_pct: Optional[float] = None  # Success %
+    lng: Optional[int] = None  # Longest pass
+    y_a: Optional[float] = None  # Y/A (Yards per Attempt)
+    ay_a: Optional[float] = None  # AY/A (Adjusted Yards per Attempt)
+    y_c: Optional[float] = None  # Y/C (Yards per Completion)
+    y_g: Optional[float] = None  # Y/G (Yards per Game)
+    rate: Optional[float] = None  # Passer Rating
+    qbr: Optional[float] = None  # QBR
+    sk: Optional[int] = None  # Sacks
+    sk_yds: Optional[int] = None  # Sack Yards
+    sk_pct: Optional[float] = None  # Sack %
+    ny_a: Optional[float] = None  # NY/A (Net Yards per Attempt)
+    any_a: Optional[float] = None  # ANY/A (Adjusted Net Yards per Attempt)
+    four_qc: Optional[int] = None  # 4QC (4th Quarter Comebacks)
+    gwd: Optional[int] = None  # GWD (Game Winning Drives)
+    awards: Optional[str] = None  # Awards
+    player_additional: Optional[str] = None  # Player-additional
+    
+    # Metadata
     scraped_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
     def validate(self) -> List[str]:
-        """Validate QB basic stats"""
+        """Validate QB passing stats - minimal validation for raw data"""
         errors = []
         
         if not self.pfr_id:
             errors.append("PFR ID is required")
         
+        if not self.player_name:
+            errors.append("Player name is required")
+        
         if self.season < 1920 or self.season > 2030:
             errors.append("Season must be between 1920 and 2030")
-        
-        if not self.team:
-            errors.append("Team is required")
-        
-        if self.games_played < 0:
-            errors.append("Games played cannot be negative")
-        
-        if self.games_started < 0:
-            errors.append("Games started cannot be negative")
-        
-        if self.games_started > self.games_played:
-            errors.append("Games started cannot exceed games played")
-        
-        if self.completions < 0:
-            errors.append("Completions cannot be negative")
-        
-        if self.attempts < 0:
-            errors.append("Attempts cannot be negative")
-        
-        if self.completions > self.attempts:
-            errors.append("Completions cannot exceed attempts")
-        
-        if self.completion_pct is not None and (self.completion_pct < 0 or self.completion_pct > 100):
-            errors.append("Completion percentage must be between 0 and 100")
-        
-        if self.pass_yards < 0:
-            errors.append("Pass yards cannot be negative")
-        
-        if self.pass_tds < 0:
-            errors.append("Pass touchdowns cannot be negative")
-        
-        if self.interceptions < 0:
-            errors.append("Interceptions cannot be negative")
-        
-        if self.longest_pass < 0:
-            errors.append("Longest pass cannot be negative")
-        
-        if self.rating is not None and (self.rating < 0 or self.rating > 158.3):
-            errors.append("Rating must be between 0 and 158.3")
-        
-        if self.sacks < 0:
-            errors.append("Sacks cannot be negative")
         
         return errors
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'QBBasicStats':
-        """Create QBBasicStats instance from dictionary"""
+    def from_dict(cls, data: Dict[str, Any]) -> 'QBPassingStats':
+        """Create QBPassingStats instance from dictionary"""
         return cls(
             pfr_id=data.get('pfr_id', ''),
             player_name=data.get('player_name', ''),
             player_url=data.get('player_url', ''),
             season=data.get('season', 0),
-            team=data.get('team', ''),
-            games_played=data.get('games_played', 0),
-            games_started=data.get('games_started', 0),
-            completions=data.get('completions', 0),
-            attempts=data.get('attempts', 0),
-            completion_pct=data.get('completion_pct'),
-            pass_yards=data.get('pass_yards', 0),
-            pass_tds=data.get('pass_tds', 0),
-            interceptions=data.get('interceptions', 0),
-            longest_pass=data.get('longest_pass', 0),
-            rating=data.get('rating'),
-            sacks=data.get('sacks', 0),
-            sack_yards=data.get('sack_yards', 0),
-            net_yards_per_attempt=data.get('net_yards_per_attempt'),
-            scraped_at=data.get('scraped_at', datetime.now()),
-            updated_at=data.get('updated_at', datetime.now())
-        )
-
-
-@dataclass
-class QBAdvancedStats:
-    """Data class for advanced QB statistics"""
-    pfr_id: str
-    season: int
-    qbr: Optional[float] = None
-    adjusted_net_yards_per_attempt: Optional[float] = None
-    fourth_quarter_comebacks: int = 0
-    game_winning_drives: int = 0
-    scraped_at: datetime = field(default_factory=datetime.now)
-    updated_at: datetime = field(default_factory=datetime.now)
-
-    def validate(self) -> List[str]:
-        """Validate QB advanced stats"""
-        errors = []
-        
-        if not self.pfr_id:
-            errors.append("PFR ID is required")
-        
-        if self.season < 1920 or self.season > 2030:
-            errors.append("Season must be between 1920 and 2030")
-        
-        if self.qbr is not None and (self.qbr < 0 or self.qbr > 100):
-            errors.append("QBR must be between 0 and 100")
-        
-        if self.fourth_quarter_comebacks < 0:
-            errors.append("Fourth quarter comebacks cannot be negative")
-        
-        if self.game_winning_drives < 0:
-            errors.append("Game winning drives cannot be negative")
-        
-        return errors
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'QBAdvancedStats':
-        """Create QBAdvancedStats instance from dictionary"""
-        return cls(
-            pfr_id=data.get('pfr_id', ''),
-            season=data.get('season', 0),
+            rk=data.get('rk'),
+            age=data.get('age'),
+            team=data.get('team'),
+            pos=data.get('pos'),
+            g=data.get('g'),
+            gs=data.get('gs'),
+            qb_rec=data.get('qb_rec'),
+            cmp=data.get('cmp'),
+            att=data.get('att'),
+            cmp_pct=data.get('cmp_pct'),
+            yds=data.get('yds'),
+            td=data.get('td'),
+            td_pct=data.get('td_pct'),
+            int=data.get('int'),
+            int_pct=data.get('int_pct'),
+            first_downs=data.get('first_downs'),
+            succ_pct=data.get('succ_pct'),
+            lng=data.get('lng'),
+            y_a=data.get('y_a'),
+            ay_a=data.get('ay_a'),
+            y_c=data.get('y_c'),
+            y_g=data.get('y_g'),
+            rate=data.get('rate'),
             qbr=data.get('qbr'),
-            adjusted_net_yards_per_attempt=data.get('adjusted_net_yards_per_attempt'),
-            fourth_quarter_comebacks=data.get('fourth_quarter_comebacks', 0),
-            game_winning_drives=data.get('game_winning_drives', 0),
+            sk=data.get('sk'),
+            sk_yds=data.get('sk_yds'),
+            sk_pct=data.get('sk_pct'),
+            ny_a=data.get('ny_a'),
+            any_a=data.get('any_a'),
+            four_qc=data.get('four_qc'),
+            gwd=data.get('gwd'),
+            awards=data.get('awards'),
+            player_additional=data.get('player_additional'),
             scraped_at=data.get('scraped_at', datetime.now()),
             updated_at=data.get('updated_at', datetime.now())
         )
 
 
 @dataclass
-class QBSplitStats:
-    """Data class for QB split statistics"""
+class QBSplitsType1:
+    """
+    Raw QB splits data from advanced_stats_1.csv
+    Contains ALL columns from the CSV with no calculations
+    """
+    # Primary identifiers
     pfr_id: str
+    player_name: str
     season: int
-    split_type: str
-    split_category: str
-    games: int = 0
-    completions: int = 0
-    attempts: int = 0
-    completion_pct: Optional[float] = None
-    pass_yards: int = 0
-    pass_tds: int = 0
-    interceptions: int = 0
-    rating: Optional[float] = None
-    sacks: int = 0
-    sack_yards: int = 0
-    net_yards_per_attempt: Optional[float] = None
+    
+    # Split identifiers
+    split: Optional[str] = None  # Split type (e.g., "League", "Place", "Result")
+    value: Optional[str] = None  # Split value (e.g., "NFL", "Home", "Win")
+    
+    # Raw CSV columns (matching advanced_stats_1.csv exactly)
+    g: Optional[int] = None  # Games
+    w: Optional[int] = None  # Wins
+    l: Optional[int] = None  # Losses
+    t: Optional[int] = None  # Ties
+    cmp: Optional[int] = None  # Completions
+    att: Optional[int] = None  # Attempts
+    inc: Optional[int] = None  # Incompletions
+    cmp_pct: Optional[float] = None  # Completion %
+    yds: Optional[int] = None  # Passing Yards
+    td: Optional[int] = None  # Passing TDs
+    int: Optional[int] = None  # Interceptions
+    rate: Optional[float] = None  # Passer Rating
+    sk: Optional[int] = None  # Sacks
+    sk_yds: Optional[int] = None  # Sack Yards
+    y_a: Optional[float] = None  # Y/A (Yards per Attempt)
+    ay_a: Optional[float] = None  # AY/A (Adjusted Yards per Attempt)
+    a_g: Optional[float] = None  # A/G (Attempts per Game)
+    y_g: Optional[float] = None  # Y/G (Yards per Game)
+    rush_att: Optional[int] = None  # Rush Attempts
+    rush_yds: Optional[int] = None  # Rush Yards
+    rush_y_a: Optional[float] = None  # Rush Y/A
+    rush_td: Optional[int] = None  # Rush TDs
+    rush_a_g: Optional[float] = None  # Rush A/G (Rush Attempts per Game)
+    rush_y_g: Optional[float] = None  # Rush Y/G (Rush Yards per Game)
+    total_td: Optional[int] = None  # Total TDs
+    pts: Optional[int] = None  # Points
+    fmb: Optional[int] = None  # Fumbles
+    fl: Optional[int] = None  # Fumbles Lost
+    ff: Optional[int] = None  # Fumbles Forced
+    fr: Optional[int] = None  # Fumbles Recovered
+    fr_yds: Optional[int] = None  # Fumble Recovery Yards
+    fr_td: Optional[int] = None  # Fumble Recovery TDs
+    
+    # Metadata
     scraped_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
-    
-    # Additional fields for comprehensive QB splits data
-    rush_attempts: int = 0
-    rush_yards: int = 0
-    rush_tds: int = 0
-    fumbles: int = 0
-    fumbles_lost: int = 0
-    fumbles_forced: int = 0
-    fumbles_recovered: int = 0
-    fumble_recovery_yards: int = 0
-    fumble_recovery_tds: int = 0
-    incompletions: int = 0
-    wins: int = 0
-    losses: int = 0
-    ties: int = 0
-    attempts_per_game: Optional[float] = None
-    yards_per_game: Optional[float] = None
-    rush_attempts_per_game: Optional[float] = None
-    rush_yards_per_game: Optional[float] = None
-    total_tds: int = 0
-    points: int = 0
 
     def validate(self) -> List[str]:
-        """Validate QB split stats"""
+        """Validate QB splits type 1 - minimal validation for raw data"""
         errors = []
         
         if not self.pfr_id:
@@ -299,141 +261,134 @@ class QBSplitStats:
         if self.season < 1920 or self.season > 2030:
             errors.append("Season must be between 1920 and 2030")
         
-        if not self.split_type:
-            errors.append("Split type is required")
+        return errors
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'QBSplitsType1':
+        """Create QBSplitsType1 instance from dictionary"""
+        return cls(
+            pfr_id=data.get('pfr_id', ''),
+            player_name=data.get('player_name', ''),
+            season=data.get('season', 0),
+            split=data.get('split'),
+            value=data.get('value'),
+            g=data.get('g'),
+            w=data.get('w'),
+            l=data.get('l'),
+            t=data.get('t'),
+            cmp=data.get('cmp'),
+            att=data.get('att'),
+            inc=data.get('inc'),
+            cmp_pct=data.get('cmp_pct'),
+            yds=data.get('yds'),
+            td=data.get('td'),
+            int=data.get('int'),
+            rate=data.get('rate'),
+            sk=data.get('sk'),
+            sk_yds=data.get('sk_yds'),
+            y_a=data.get('y_a'),
+            ay_a=data.get('ay_a'),
+            a_g=data.get('a_g'),
+            y_g=data.get('y_g'),
+            rush_att=data.get('rush_att'),
+            rush_yds=data.get('rush_yds'),
+            rush_y_a=data.get('rush_y_a'),
+            rush_td=data.get('rush_td'),
+            rush_a_g=data.get('rush_a_g'),
+            rush_y_g=data.get('rush_y_g'),
+            total_td=data.get('total_td'),
+            pts=data.get('pts'),
+            fmb=data.get('fmb'),
+            fl=data.get('fl'),
+            ff=data.get('ff'),
+            fr=data.get('fr'),
+            fr_yds=data.get('fr_yds'),
+            fr_td=data.get('fr_td'),
+            scraped_at=data.get('scraped_at', datetime.now()),
+            updated_at=data.get('updated_at', datetime.now())
+        )
+
+
+@dataclass
+class QBSplitsType2:
+    """
+    Raw QB splits data from advanced_stats.2.csv
+    Contains ALL columns from the CSV with no calculations
+    """
+    # Primary identifiers
+    pfr_id: str
+    player_name: str
+    season: int
+    
+    # Split identifiers
+    split: Optional[str] = None  # Split type (e.g., "Down", "Yards To Go")
+    value: Optional[str] = None  # Split value (e.g., "1st", "1-3")
+    
+    # Raw CSV columns (matching advanced_stats.2.csv exactly)
+    cmp: Optional[int] = None  # Completions
+    att: Optional[int] = None  # Attempts
+    inc: Optional[int] = None  # Incompletions
+    cmp_pct: Optional[float] = None  # Completion %
+    yds: Optional[int] = None  # Passing Yards
+    td: Optional[int] = None  # Passing TDs
+    first_downs: Optional[int] = None  # 1D (First Downs)
+    int: Optional[int] = None  # Interceptions
+    rate: Optional[float] = None  # Passer Rating
+    sk: Optional[int] = None  # Sacks
+    sk_yds: Optional[int] = None  # Sack Yards
+    y_a: Optional[float] = None  # Y/A (Yards per Attempt)
+    ay_a: Optional[float] = None  # AY/A (Adjusted Yards per Attempt)
+    rush_att: Optional[int] = None  # Rush Attempts
+    rush_yds: Optional[int] = None  # Rush Yards
+    rush_y_a: Optional[float] = None  # Rush Y/A
+    rush_td: Optional[int] = None  # Rush TDs
+    rush_first_downs: Optional[int] = None  # Rush First Downs
+    
+    # Metadata
+    scraped_at: datetime = field(default_factory=datetime.now)
+    updated_at: datetime = field(default_factory=datetime.now)
+
+    def validate(self) -> List[str]:
+        """Validate QB splits type 2 - minimal validation for raw data"""
+        errors = []
         
-        if not self.split_category:
-            errors.append("Split category is required")
+        if not self.pfr_id:
+            errors.append("PFR ID is required")
         
-        if self.games < 0:
-            errors.append("Games cannot be negative")
-        
-        if self.completions < 0:
-            errors.append("Completions cannot be negative")
-        
-        if self.attempts < 0:
-            errors.append("Attempts cannot be negative")
-        
-        if self.completions > self.attempts:
-            errors.append("Completions cannot exceed attempts")
-        
-        if self.completion_pct is not None and (self.completion_pct < 0 or self.completion_pct > 100):
-            errors.append("Completion percentage must be between 0 and 100")
-        
-        if self.pass_yards < 0:
-            errors.append("Pass yards cannot be negative")
-        
-        if self.pass_tds < 0:
-            errors.append("Pass touchdowns cannot be negative")
-        
-        if self.interceptions < 0:
-            errors.append("Interceptions cannot be negative")
-        
-        if self.rating is not None and (self.rating < 0 or self.rating > 158.3):
-            errors.append("Rating must be between 0 and 158.3")
-        
-        if self.sacks < 0:
-            errors.append("Sacks cannot be negative")
-        
-        # Additional field validation
-        if self.rush_attempts < 0:
-            errors.append("Rush attempts cannot be negative")
-        
-        if self.rush_yards < 0:
-            errors.append("Rush yards cannot be negative")
-        
-        if self.rush_tds < 0:
-            errors.append("Rush touchdowns cannot be negative")
-        
-        if self.fumbles < 0:
-            errors.append("Fumbles cannot be negative")
-        
-        if self.fumbles_lost < 0:
-            errors.append("Fumbles lost cannot be negative")
-        
-        if self.fumbles_forced < 0:
-            errors.append("Fumbles forced cannot be negative")
-        
-        if self.fumbles_recovered < 0:
-            errors.append("Fumbles recovered cannot be negative")
-        
-        if self.fumble_recovery_yards < 0:
-            errors.append("Fumble recovery yards cannot be negative")
-        
-        if self.fumble_recovery_tds < 0:
-            errors.append("Fumble recovery touchdowns cannot be negative")
-        
-        if self.incompletions < 0:
-            errors.append("Incompletions cannot be negative")
-        
-        if self.wins < 0:
-            errors.append("Wins cannot be negative")
-        
-        if self.losses < 0:
-            errors.append("Losses cannot be negative")
-        
-        if self.ties < 0:
-            errors.append("Ties cannot be negative")
-        
-        if self.total_tds < 0:
-            errors.append("Total touchdowns cannot be negative")
-        
-        if self.points < 0:
-            errors.append("Points cannot be negative")
-        
-        # Logical consistency checks
-        if self.fumbles_lost > self.fumbles:
-            errors.append("Fumbles lost cannot exceed total fumbles")
-        
-        if self.fumbles_recovered > self.fumbles:
-            errors.append("Fumbles recovered cannot exceed total fumbles")
-        
-        expected_total_tds = self.pass_tds + self.rush_tds + self.fumble_recovery_tds
-        if self.total_tds < expected_total_tds:
-            errors.append(f"Total touchdowns ({self.total_tds}) should be at least {expected_total_tds}")
+        if self.season < 1920 or self.season > 2030:
+            errors.append("Season must be between 1920 and 2030")
         
         return errors
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'QBSplitStats':
-        """Create QBSplitStats instance from dictionary"""
+    def from_dict(cls, data: Dict[str, Any]) -> 'QBSplitsType2':
+        """Create QBSplitsType2 instance from dictionary"""
         return cls(
             pfr_id=data.get('pfr_id', ''),
+            player_name=data.get('player_name', ''),
             season=data.get('season', 0),
-            split_type=data.get('split_type', ''),
-            split_category=data.get('split_category', ''),
-            games=data.get('games', 0),
-            completions=data.get('completions', 0),
-            attempts=data.get('attempts', 0),
-            completion_pct=data.get('completion_pct'),
-            pass_yards=data.get('pass_yards', 0),
-            pass_tds=data.get('pass_tds', 0),
-            interceptions=data.get('interceptions', 0),
-            rating=data.get('rating'),
-            sacks=data.get('sacks', 0),
-            sack_yards=data.get('sack_yards', 0),
-            net_yards_per_attempt=data.get('net_yards_per_attempt'),
+            split=data.get('split'),
+            value=data.get('value'),
+            cmp=data.get('cmp'),
+            att=data.get('att'),
+            inc=data.get('inc'),
+            cmp_pct=data.get('cmp_pct'),
+            yds=data.get('yds'),
+            td=data.get('td'),
+            first_downs=data.get('first_downs'),
+            int=data.get('int'),
+            rate=data.get('rate'),
+            sk=data.get('sk'),
+            sk_yds=data.get('sk_yds'),
+            y_a=data.get('y_a'),
+            ay_a=data.get('ay_a'),
+            rush_att=data.get('rush_att'),
+            rush_yds=data.get('rush_yds'),
+            rush_y_a=data.get('rush_y_a'),
+            rush_td=data.get('rush_td'),
+            rush_first_downs=data.get('rush_first_downs'),
             scraped_at=data.get('scraped_at', datetime.now()),
-            updated_at=data.get('updated_at', datetime.now()),
-            rush_attempts=data.get('rush_attempts', 0),
-            rush_yards=data.get('rush_yards', 0),
-            rush_tds=data.get('rush_tds', 0),
-            fumbles=data.get('fumbles', 0),
-            fumbles_lost=data.get('fumbles_lost', 0),
-            fumbles_forced=data.get('fumbles_forced', 0),
-            fumbles_recovered=data.get('fumbles_recovered', 0),
-            fumble_recovery_yards=data.get('fumble_recovery_yards', 0),
-            fumble_recovery_tds=data.get('fumble_recovery_tds', 0),
-            incompletions=data.get('incompletions', 0),
-            wins=data.get('wins', 0),
-            losses=data.get('losses', 0),
-            ties=data.get('ties', 0),
-            attempts_per_game=data.get('attempts_per_game'),
-            yards_per_game=data.get('yards_per_game'),
-            rush_attempts_per_game=data.get('rush_attempts_per_game'),
-            rush_yards_per_game=data.get('rush_yards_per_game'),
-            total_tds=data.get('total_tds', 0),
-            points=data.get('points', 0)
+            updated_at=data.get('updated_at', datetime.now())
         )
 
 
@@ -504,9 +459,9 @@ class ScrapingLog:
     successful_requests: int = 0
     failed_requests: int = 0
     total_players: int = 0
-    total_basic_stats: int = 0
-    total_advanced_stats: int = 0
-    total_qb_splits: int = 0
+    total_passing_stats: int = 0
+    total_splits_type1: int = 0
+    total_splits_type2: int = 0
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     rate_limit_violations: int = 0
@@ -538,14 +493,14 @@ class ScrapingLog:
         if self.total_players < 0:
             errors.append("Total players cannot be negative")
         
-        if self.total_basic_stats < 0:
-            errors.append("Total basic stats cannot be negative")
+        if self.total_passing_stats < 0:
+            errors.append("Total passing stats cannot be negative")
         
-        if self.total_advanced_stats < 0:
-            errors.append("Total advanced stats cannot be negative")
+        if self.total_splits_type1 < 0:
+            errors.append("Total splits type 1 cannot be negative")
         
-        if self.total_qb_splits < 0:
-            errors.append("Total QB splits cannot be negative")
+        if self.total_splits_type2 < 0:
+            errors.append("Total splits type 2 cannot be negative")
         
         if self.rate_limit_violations < 0:
             errors.append("Rate limit violations cannot be negative")
@@ -567,9 +522,9 @@ class ScrapingLog:
             successful_requests=data.get('successful_requests', 0),
             failed_requests=data.get('failed_requests', 0),
             total_players=data.get('total_players', 0),
-            total_basic_stats=data.get('total_basic_stats', 0),
-            total_advanced_stats=data.get('total_advanced_stats', 0),
-            total_qb_splits=data.get('total_qb_splits', 0),
+            total_passing_stats=data.get('total_passing_stats', 0),
+            total_splits_type1=data.get('total_splits_type1', 0),
+            total_splits_type2=data.get('total_splits_type2', 0),
             errors=data.get('errors', []),
             warnings=data.get('warnings', []),
             rate_limit_violations=data.get('rate_limit_violations', 0),
@@ -578,17 +533,19 @@ class ScrapingLog:
         )
 
 
-# Legacy compatibility - keep old method for backward compatibility
 def generate_player_id(player_name: str, player_url: Optional[str] = None) -> str:
-    """
-    Generate consistent player ID from name or PFR URL
+    """Generate a player ID from name and URL"""
+    if player_url:
+        return extract_pfr_id(player_url) or generate_player_id(player_name)
     
-    Args:
-        player_name: Player's full name
-        player_url: Player's PFR URL (optional)
-        
-    Returns:
-        Consistent player ID (PFR ID if available, otherwise generated from name)
-    """
-    from src.utils.data_utils import generate_player_id as utils_generate_player_id
-    return utils_generate_player_id(player_name, player_url) 
+    # Generate ID from name if URL not available
+    parts = player_name.lower().split()
+    if len(parts) >= 2:
+        return f"{parts[-1][:4]}{parts[0][:2]}01"
+    return f"{parts[0][:6]}01"
+
+
+# Legacy aliases for backward compatibility
+QBBasicStats = QBPassingStats
+QBSplitStats = QBSplitsType1
+QBAdvancedStats = QBSplitsType2 

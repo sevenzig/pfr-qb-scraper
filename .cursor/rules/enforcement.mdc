@@ -1,0 +1,757 @@
+# Enforcement and Quality Assurance
+*How these rules are enforced and maintained throughout the migration*
+
+## Automated Enforcement
+
+### Pre-commit Hooks
+Enforce quality standards before code enters version control:
+
+```bash
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/psf/black
+    rev: 23.1.0
+    hooks:
+      - id: black
+        language_version: python3.11
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+        additional_dependencies: [flake8-docstrings]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.0.1
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-requests]
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: pytest
+        language: system
+        types: [python]
+        args: [--cov=src, --cov-fail-under=85]
+        pass_filenames: false
+        always_run: true
+
+  - repo: local
+    hooks:
+      - id: migration-phase-check
+        name: Migration Phase Compliance
+        entry: python scripts/check_migration_phase.py
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+```
+
+### Continuous Integration Pipeline
+```yaml
+# .github/workflows/quality-gates.yml
+name: Quality Gates
+on: [push, pull_request]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+    
+    - name: Code formatting check
+      run: |
+        black --check src tests
+        isort --check-only src tests
+    
+    - name: Linting
+      run: |
+        flake8 src tests --max-line-length=88 --extend-ignore=E203,W503
+        pylint src --fail-under=8.0
+    
+    - name: Type checking
+      run: |
+        mypy src --strict
+    
+    - name: Security scanning
+      run: |
+        bandit -r src
+        safety check
+    
+    - name: Test coverage
+      run: |
+        pytest --cov=src --cov-report=term-missing --cov-fail-under=85
+    
+    - name: Migration phase compliance
+      run: |
+        python scripts/check_migration_compliance.py
+    
+    - name: Performance regression test
+      run: |
+        python scripts/performance_regression_test.py
+    
+    - name: Documentation check
+      run: |
+        python scripts/check_documentation_coverage.py
+```
+
+## Code Review Process
+
+### Review Requirements
+Every pull request must pass:
+- [ ] **Automated quality gates** - All CI checks pass
+- [ ] **Code review approval** - At least one reviewer approves
+- [ ] **Migration compliance** - Follows current migration phase rules
+- [ ] **Test coverage** - Maintains or increases coverage
+- [ ] **Performance validation** - No significant regressions
+- [ ] **Documentation updates** - Relevant docs are updated
+
+### Review Checklist Template
+```markdown
+## Code Review Checklist
+
+### General Quality
+- [ ] Code follows project style guidelines
+- [ ] Functions have comprehensive docstrings
+- [ ] Type hints are complete and accurate
+- [ ] Error handling is appropriate
+- [ ] Logging is structured and informative
+
+### Migration Compliance
+- [ ] Follows current migration phase requirements
+- [ ] Maintains backwards compatibility (Phases 1-3)
+- [ ] Uses approved architecture patterns
+- [ ] Doesn't break existing functionality
+- [ ] Includes appropriate deprecation warnings
+
+### Testing
+- [ ] Unit tests cover new functionality
+- [ ] Integration tests for end-to-end workflows
+- [ ] Performance tests for critical paths
+- [ ] Edge cases are tested
+- [ ] Mock usage is appropriate
+
+### Security
+- [ ] No hardcoded secrets or credentials
+- [ ] Input validation is present
+- [ ] SQL injection prevention
+- [ ] No sensitive data in logs
+- [ ] Authentication/authorization checks
+
+### Performance
+- [ ] No obvious performance regressions
+- [ ] Database queries are optimized
+- [ ] Memory usage is reasonable
+- [ ] Rate limiting is implemented
+- [ ] Resource cleanup is proper
+
+### Documentation
+- [ ] API documentation is updated
+- [ ] User guides reflect changes
+- [ ] Migration documentation is current
+- [ ] Examples are provided
+- [ ] Troubleshooting info is included
+```
+
+## Automated Quality Monitoring
+
+### Code Quality Metrics
+```python
+# scripts/quality_metrics.py
+import ast
+import os
+from typing import Dict, List, Tuple
+
+class QualityMetrics:
+    """Monitor code quality metrics."""
+    
+    def __init__(self, src_dir: str = "src"):
+        self.src_dir = src_dir
+    
+    def calculate_cyclomatic_complexity(self, file_path: str) -> int:
+        """Calculate cyclomatic complexity for a file."""
+        with open(file_path, 'r') as f:
+            tree = ast.parse(f.read())
+        
+        complexity = 1  # Base complexity
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.If, ast.While, ast.For, ast.ExceptHandler)):
+                complexity += 1
+            elif isinstance(node, ast.BoolOp):
+                complexity += len(node.values) - 1
+        
+        return complexity
+    
+    def check_function_length(self, file_path: str) -> List[Tuple[str, int]]:
+        """Check for functions longer than 50 lines."""
+        violations = []
+        with open(file_path, 'r') as f:
+            lines = f.readlines()
+            tree = ast.parse(''.join(lines))
+        
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                func_length = node.end_lineno - node.lineno
+                if func_length > 50:
+                    violations.append((node.name, func_length))
+        
+        return violations
+    
+    def check_class_size(self, file_path: str) -> List[Tuple[str, int]]:
+        """Check for classes with too many methods."""
+        violations = []
+        with open(file_path, 'r') as f:
+            tree = ast.parse(f.read())
+        
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                method_count = sum(1 for n in node.body if isinstance(n, ast.FunctionDef))
+                if method_count > 10:
+                    violations.append((node.name, method_count))
+        
+        return violations
+    
+    def generate_quality_report(self) -> Dict:
+        """Generate comprehensive quality report."""
+        report = {
+            'files_analyzed': 0,
+            'complexity_violations': [],
+            'function_length_violations': [],
+            'class_size_violations': [],
+            'total_violations': 0
+        }
+        
+        for root, dirs, files in os.walk(self.src_dir):
+            for file in files:
+                if file.endswith('.py'):
+                    file_path = os.path.join(root, file)
+                    report['files_analyzed'] += 1
+                    
+                    # Check complexity
+                    complexity = self.calculate_cyclomatic_complexity(file_path)
+                    if complexity > 10:
+                        report['complexity_violations'].append((file_path, complexity))
+                    
+                    # Check function length
+                    func_violations = self.check_function_length(file_path)
+                    report['function_length_violations'].extend(
+                        [(file_path, func, length) for func, length in func_violations]
+                    )
+                    
+                    # Check class size
+                    class_violations = self.check_class_size(file_path)
+                    report['class_size_violations'].extend(
+                        [(file_path, cls, methods) for cls, methods in class_violations]
+                    )
+        
+        report['total_violations'] = (
+            len(report['complexity_violations']) +
+            len(report['function_length_violations']) +
+            len(report['class_size_violations'])
+        )
+        
+        return report
+```
+
+### Migration Phase Compliance Checker
+```python
+# scripts/check_migration_compliance.py
+import ast
+import os
+import sys
+from typing import List, Dict
+
+class MigrationComplianceChecker:
+    """Check compliance with migration phase requirements."""
+    
+    def __init__(self, current_phase: str = "phase2"):
+        self.current_phase = current_phase
+        self.violations = []
+    
+    def check_backwards_compatibility(self) -> List[str]:
+        """Check for backwards compatibility violations."""
+        violations = []
+        
+        # Check if legacy scripts still exist
+        legacy_scripts = [
+            'scripts/enhanced_qb_scraper.py',
+            'scripts/robust_qb_scraper.py',
+            'scripts/populate_teams.py'
+        ]
+        
+        for script in legacy_scripts:
+            if not os.path.exists(script):
+                violations.append(f"Legacy script removed prematurely: {script}")
+        
+        # Check for breaking changes in existing APIs
+        # ... implementation would check for API changes
+        
+        return violations
+    
+    def check_architecture_compliance(self) -> List[str]:
+        """Check architecture compliance."""
+        violations = []
+        
+        # Check for business logic in CLI handlers
+        cli_files = self.get_files_in_directory('src/cli/')
+        for file_path in cli_files:
+            if self.has_business_logic_in_cli(file_path):
+                violations.append(f"Business logic found in CLI handler: {file_path}")
+        
+        # Check for circular dependencies
+        circular_deps = self.check_circular_dependencies()
+        violations.extend(circular_deps)
+        
+        return violations
+    
+    def check_new_code_structure(self) -> List[str]:
+        """Check that new code follows proper structure."""
+        violations = []
+        
+        # Check that CLI commands inherit from BaseCommand
+        cli_commands = self.get_cli_commands()
+        for command_file in cli_commands:
+            if not self.inherits_from_base_command(command_file):
+                violations.append(f"CLI command doesn't inherit from BaseCommand: {command_file}")
+        
+        # Check that scrapers extend CoreScraper
+        scrapers = self.get_scrapers()
+        for scraper_file in scrapers:
+            if not self.extends_core_scraper(scraper_file):
+                violations.append(f"Scraper doesn't extend CoreScraper: {scraper_file}")
+        
+        return violations
+    
+    def check_configuration_usage(self) -> List[str]:
+        """Check that configuration system is used properly."""
+        violations = []
+        
+        # Check for hardcoded values
+        all_files = self.get_all_python_files()
+        for file_path in all_files:
+            hardcoded_values = self.find_hardcoded_values(file_path)
+            if hardcoded_values:
+                violations.append(f"Hardcoded values found in {file_path}: {hardcoded_values}")
+        
+        return violations
+    
+    def run_compliance_check(self) -> Dict:
+        """Run comprehensive compliance check."""
+        report = {
+            'phase': self.current_phase,
+            'backwards_compatibility': self.check_backwards_compatibility(),
+            'architecture_compliance': self.check_architecture_compliance(),
+            'code_structure': self.check_new_code_structure(),
+            'configuration_usage': self.check_configuration_usage(),
+            'total_violations': 0
+        }
+        
+        total_violations = sum(len(violations) for violations in report.values() if isinstance(violations, list))
+        report['total_violations'] = total_violations
+        
+        return report
+    
+    # Helper methods would be implemented here
+    def get_files_in_directory(self, directory: str) -> List[str]:
+        """Get all Python files in directory."""
+        files = []
+        for root, dirs, filenames in os.walk(directory):
+            for filename in filenames:
+                if filename.endswith('.py'):
+                    files.append(os.path.join(root, filename))
+        return files
+    
+    def has_business_logic_in_cli(self, file_path: str) -> bool:
+        """Check if CLI file contains business logic."""
+        # Implementation would analyze AST for business logic patterns
+        return False
+    
+    def check_circular_dependencies(self) -> List[str]:
+        """Check for circular dependencies."""
+        # Implementation would analyze import statements
+        return []
+
+
+if __name__ == "__main__":
+    checker = MigrationComplianceChecker()
+    report = checker.run_compliance_check()
+    
+    if report['total_violations'] > 0:
+        print(f"Migration compliance check failed with {report['total_violations']} violations")
+        for category, violations in report.items():
+            if isinstance(violations, list) and violations:
+                print(f"\n{category}:")
+                for violation in violations:
+                    print(f"  - {violation}")
+        sys.exit(1)
+    else:
+        print("Migration compliance check passed!")
+```
+
+## Performance Monitoring
+
+### Performance Regression Detection
+```python
+# scripts/performance_regression_test.py
+import json
+import time
+from typing import Dict, List
+import requests_mock
+from src.core.scraper import CoreScraper
+
+class PerformanceRegression:
+    """Detect performance regressions during migration."""
+    
+    def __init__(self, baseline_file: str = "performance_baseline.json"):
+        self.baseline_file = baseline_file
+        self.load_baseline()
+    
+    def load_baseline(self):
+        """Load performance baseline data."""
+        try:
+            with open(self.baseline_file, 'r') as f:
+                self.baseline = json.load(f)
+        except FileNotFoundError:
+            self.baseline = {}
+    
+    def save_baseline(self):
+        """Save current performance as baseline."""
+        with open(self.baseline_file, 'w') as f:
+            json.dump(self.baseline, f, indent=2)
+    
+    def measure_scraping_performance(self) -> Dict[str, float]:
+        """Measure scraping performance."""
+        scraper = CoreScraper()
+        
+        with requests_mock.Mocker() as m:
+            # Mock response for consistent testing
+            m.get(requests_mock.ANY, text="<html>Mock response</html>")
+            
+            # Measure single player scraping
+            start_time = time.time()
+            scraper.scrape_player_stats("Test Player", 2024)
+            single_player_time = time.time() - start_time
+            
+            # Measure batch scraping
+            start_time = time.time()
+            for i in range(10):
+                scraper.scrape_player_stats(f"Player {i}", 2024)
+            batch_time = time.time() - start_time
+        
+        return {
+            'single_player_scraping': single_player_time,
+            'batch_scraping_10_players': batch_time,
+            'average_per_player': batch_time / 10
+        }
+    
+    def check_regression(self, current_metrics: Dict[str, float]) -> List[str]:
+        """Check for performance regressions."""
+        regressions = []
+        
+        for metric_name, current_value in current_metrics.items():
+            if metric_name in self.baseline:
+                baseline_value = self.baseline[metric_name]
+                regression_pct = ((current_value - baseline_value) / baseline_value) * 100
+                
+                if regression_pct > 5:  # More than 5% slower
+                    regressions.append(
+                        f"{metric_name}: {regression_pct:.1f}% slower "
+                        f"(baseline: {baseline_value:.3f}s, current: {current_value:.3f}s)"
+                    )
+        
+        return regressions
+    
+    def run_performance_check(self) -> Dict:
+        """Run comprehensive performance check."""
+        current_metrics = self.measure_scraping_performance()
+        regressions = self.check_regression(current_metrics)
+        
+        report = {
+            'current_metrics': current_metrics,
+            'baseline_metrics': self.baseline,
+            'regressions': regressions,
+            'regression_count': len(regressions)
+        }
+        
+        # Update baseline if no regressions
+        if not regressions:
+            self.baseline.update(current_metrics)
+            self.save_baseline()
+        
+        return report
+
+
+if __name__ == "__main__":
+    checker = PerformanceRegression()
+    report = checker.run_performance_check()
+    
+    if report['regression_count'] > 0:
+        print(f"Performance regression detected!")
+        for regression in report['regressions']:
+            print(f"  - {regression}")
+        sys.exit(1)
+    else:
+        print("No performance regressions detected")
+```
+
+## Documentation Coverage
+
+### Documentation Compliance Checker
+```python
+# scripts/check_documentation_coverage.py
+import ast
+import os
+import re
+from typing import Dict, List, Tuple
+
+class DocumentationChecker:
+    """Check documentation coverage and quality."""
+    
+    def __init__(self, src_dir: str = "src"):
+        self.src_dir = src_dir
+    
+    def check_docstring_coverage(self) -> Dict:
+        """Check docstring coverage across codebase."""
+        stats = {
+            'total_functions': 0,
+            'documented_functions': 0,
+            'total_classes': 0,
+            'documented_classes': 0,
+            'missing_docstrings': []
+        }
+        
+        for root, dirs, files in os.walk(self.src_dir):
+            for file in files:
+                if file.endswith('.py'):
+                    file_path = os.path.join(root, file)
+                    file_stats = self.analyze_file_docstrings(file_path)
+                    
+                    stats['total_functions'] += file_stats['total_functions']
+                    stats['documented_functions'] += file_stats['documented_functions']
+                    stats['total_classes'] += file_stats['total_classes']
+                    stats['documented_classes'] += file_stats['documented_classes']
+                    stats['missing_docstrings'].extend(file_stats['missing_docstrings'])
+        
+        # Calculate coverage percentages
+        if stats['total_functions'] > 0:
+            stats['function_coverage'] = (stats['documented_functions'] / stats['total_functions']) * 100
+        else:
+            stats['function_coverage'] = 100
+        
+        if stats['total_classes'] > 0:
+            stats['class_coverage'] = (stats['documented_classes'] / stats['total_classes']) * 100
+        else:
+            stats['class_coverage'] = 100
+        
+        return stats
+    
+    def analyze_file_docstrings(self, file_path: str) -> Dict:
+        """Analyze docstring coverage in a single file."""
+        with open(file_path, 'r') as f:
+            try:
+                tree = ast.parse(f.read())
+            except SyntaxError:
+                return {'total_functions': 0, 'documented_functions': 0, 
+                       'total_classes': 0, 'documented_classes': 0, 'missing_docstrings': []}
+        
+        stats = {
+            'total_functions': 0,
+            'documented_functions': 0,
+            'total_classes': 0,
+            'documented_classes': 0,
+            'missing_docstrings': []
+        }
+        
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                stats['total_functions'] += 1
+                if ast.get_docstring(node):
+                    stats['documented_functions'] += 1
+                else:
+                    stats['missing_docstrings'].append(f"{file_path}:{node.lineno} - function {node.name}")
+            
+            elif isinstance(node, ast.ClassDef):
+                stats['total_classes'] += 1
+                if ast.get_docstring(node):
+                    stats['documented_classes'] += 1
+                else:
+                    stats['missing_docstrings'].append(f"{file_path}:{node.lineno} - class {node.name}")
+        
+        return stats
+    
+    def check_docstring_quality(self) -> List[str]:
+        """Check quality of existing docstrings."""
+        quality_issues = []
+        
+        for root, dirs, files in os.walk(self.src_dir):
+            for file in files:
+                if file.endswith('.py'):
+                    file_path = os.path.join(root, file)
+                    issues = self.analyze_docstring_quality(file_path)
+                    quality_issues.extend(issues)
+        
+        return quality_issues
+    
+    def analyze_docstring_quality(self, file_path: str) -> List[str]:
+        """Analyze quality of docstrings in a file."""
+        issues = []
+        
+        with open(file_path, 'r') as f:
+            try:
+                tree = ast.parse(f.read())
+            except SyntaxError:
+                return issues
+        
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                docstring = ast.get_docstring(node)
+                if docstring:
+                    # Check for required sections
+                    if not self.has_args_section(docstring):
+                        issues.append(f"{file_path}:{node.lineno} - function {node.name} missing Args section")
+                    
+                    if not self.has_returns_section(docstring):
+                        issues.append(f"{file_path}:{node.lineno} - function {node.name} missing Returns section")
+                    
+                    if not self.has_examples(docstring):
+                        issues.append(f"{file_path}:{node.lineno} - function {node.name} missing examples")
+        
+        return issues
+    
+    def has_args_section(self, docstring: str) -> bool:
+        """Check if docstring has Args section."""
+        return bool(re.search(r'Args:', docstring))
+    
+    def has_returns_section(self, docstring: str) -> bool:
+        """Check if docstring has Returns section."""
+        return bool(re.search(r'Returns:', docstring))
+    
+    def has_examples(self, docstring: str) -> bool:
+        """Check if docstring has examples."""
+        return bool(re.search(r'Example[s]?:', docstring))
+    
+    def run_documentation_check(self) -> Dict:
+        """Run comprehensive documentation check."""
+        coverage_stats = self.check_docstring_coverage()
+        quality_issues = self.check_docstring_quality()
+        
+        report = {
+            'coverage_stats': coverage_stats,
+            'quality_issues': quality_issues,
+            'total_quality_issues': len(quality_issues)
+        }
+        
+        return report
+
+
+if __name__ == "__main__":
+    checker = DocumentationChecker()
+    report = checker.run_documentation_check()
+    
+    print(f"Documentation Coverage Report:")
+    print(f"  Function coverage: {report['coverage_stats']['function_coverage']:.1f}%")
+    print(f"  Class coverage: {report['coverage_stats']['class_coverage']:.1f}%")
+    print(f"  Quality issues: {report['total_quality_issues']}")
+    
+    if report['coverage_stats']['function_coverage'] < 90:
+        print("\nMissing docstrings:")
+        for missing in report['coverage_stats']['missing_docstrings'][:10]:  # Show first 10
+            print(f"  - {missing}")
+    
+    if report['total_quality_issues'] > 0:
+        print(f"\nDocumentation quality issues:")
+        for issue in report['quality_issues'][:10]:  # Show first 10
+            print(f"  - {issue}")
+        
+        if report['total_quality_issues'] > 20:
+            print("Documentation quality check failed!")
+            sys.exit(1)
+    
+    print("Documentation check passed!")
+```
+
+## Manual Review Process
+
+### Phase Gate Reviews
+At the end of each migration phase, conduct manual reviews:
+
+#### Phase 1 Review Checklist
+- [ ] CLI framework is intuitive and extensible
+- [ ] Help system provides clear guidance
+- [ ] Configuration system is centralized
+- [ ] No existing functionality is broken
+- [ ] Architecture patterns are established
+
+#### Phase 2 Review Checklist
+- [ ] Scraper consolidation is complete
+- [ ] New scraper produces equivalent results
+- [ ] Error handling is improved
+- [ ] Performance is acceptable
+- [ ] Users can perform basic operations
+
+#### Phase 3 Review Checklist
+- [ ] Multi-team aggregation works correctly
+- [ ] Data quality validation is comprehensive
+- [ ] Advanced features are stable
+- [ ] Session management is robust
+- [ ] User documentation is complete
+
+#### Phase 4 Review Checklist
+- [ ] All tests pass consistently
+- [ ] Performance meets benchmarks
+- [ ] User migration is successful
+- [ ] Documentation is comprehensive
+- [ ] Legacy deprecation is complete
+
+## Escalation Process
+
+### When Quality Gates Fail
+1. **Immediate stop** - No further development until issue is resolved
+2. **Root cause analysis** - Understand why the failure occurred
+3. **Fix implementation** - Address the underlying issue
+4. **Validation** - Ensure fix resolves the problem
+5. **Process improvement** - Update rules/tools to prevent recurrence
+
+### Violation Severity Levels
+- **Critical**: Breaks existing functionality, security vulnerability
+- **High**: Performance regression > 10%, architecture violation
+- **Medium**: Code quality issue, documentation gap
+- **Low**: Style violation, minor optimization opportunity
+
+## Continuous Improvement
+
+### Regular Quality Audits
+- **Weekly**: Automated metrics review
+- **Monthly**: Manual code quality audit
+- **Quarterly**: Process effectiveness review
+- **Annually**: Tool and standard updates
+
+### Feedback Loops
+- **Developer feedback** on rule effectiveness
+- **User feedback** on migration experience
+- **Performance monitoring** results
+- **Security audit** findings
+
+These enforcement mechanisms ensure that quality standards are maintained throughout the migration process, creating a robust and maintainable system that will serve the project well into the future.
+description:
+globs:
+alwaysApply: false
+---

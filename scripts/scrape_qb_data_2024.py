@@ -34,6 +34,7 @@ from config.config import config
 from database.db_manager import DatabaseManager
 from models.qb_models import QBBasicStats, QBSplitStats
 from scrapers.enhanced_scraper import EnhancedPFRScraper
+from utils.data_utils import normalize_pfr_team_code
 
 # Configure logging
 logging.basicConfig(
@@ -60,7 +61,7 @@ class QBDataScraper2024:
         """Initialize the scraper with configuration"""
         self.config = config
         self.db_manager = DatabaseManager(config.get_database_url())
-        self.scraper = EnhancedPFRScraper(rate_limit_delay=5.0)  # 5 second delay between requests
+        self.scraper = EnhancedPFRScraper(rate_limit_delay=config.get_rate_limit_delay())  # Use config rate limit delay
         self.season = 2024
         self.base_url = "https://www.pro-football-reference.com"
         
@@ -129,14 +130,21 @@ class QBDataScraper2024:
                 
                 # Extract team
                 team_cell = row.find('td', {'data-stat': 'team_name_abbr'})  # type: ignore
-                team = team_cell.get_text(strip=True) if team_cell else ''  # type: ignore
+                team = normalize_pfr_team_code(team_cell.get_text(strip=True) if team_cell else '')  # type: ignore
                 
                 # Extract basic stats
                 stats = self._extract_row_stats(cast(Tag, row))
                 
                 # Create QBBasicStats object with player URL
+                # Generate unique PFR ID for multi-team players
+                base_pfr_id = self._generate_player_id(player_name)
+                if team and ('2TM' in team or '3TM' in team or len(team) == 3):
+                    pfr_id = f"{base_pfr_id}_{team.lower()}"
+                else:
+                    pfr_id = base_pfr_id
+                
                 qb_stat = QBBasicStats(
-                    pfr_id=self._generate_player_id(player_name),
+                    pfr_id=pfr_id,
                     player_name=player_name,
                     player_url=player_url,
                     team=team,
@@ -200,8 +208,8 @@ class QBDataScraper2024:
             'pass_sacked_pct': 'sack_pct',
             'pass_td_pct': 'touchdown_pct',
             'pass_int_pct': 'interception_pct',
-            'pass_first': 'first_downs',
-            'pass_success_rate': 'success_rate',
+            'pass_first_down': 'first_downs',
+            'pass_success': 'success_rate',
             'pass_long': 'longest_pass',
             'comeback': 'comebacks',
             'gwd': 'game_winning_drives',

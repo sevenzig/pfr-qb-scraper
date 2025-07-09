@@ -111,6 +111,30 @@ class DatabaseManager:
             logger.error(f"Query error: {e}")
             raise
     
+    def execute(self, sql: str, params: Optional[tuple] = None) -> int:
+        """
+        Execute a statement (INSERT/UPDATE/DELETE) without returning results
+        
+        Args:
+            sql: SQL statement to execute
+            params: Optional parameters for the statement
+            
+        Returns:
+            Number of rows affected
+        """
+        try:
+            with self.get_connection() as conn:
+                with self.get_cursor(conn) as cur:
+                    if params:
+                        cur.execute(sql, params)
+                    else:
+                        cur.execute(sql)
+                    conn.commit()
+                    return cur.rowcount
+        except Exception as e:
+            logger.error(f"Execute error: {e}")
+            raise
+    
     def create_tables(self) -> None:
         """Create all necessary tables with optimized schema"""
         logger.info("Creating database tables...")
@@ -204,28 +228,49 @@ class DatabaseManager:
             return 0
         
         insert_query = """
-        INSERT INTO qb_basic_stats (
-            pfr_id, season, team, games_played, games_started,
-            completions, attempts, completion_pct, pass_yards, pass_tds,
-            interceptions, longest_pass, rating, sacks, sack_yards,
-            net_yards_per_attempt, scraped_at, updated_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO qb_passing_stats (
+            pfr_id, player_name, player_url, season, rk, age, team, pos, g, gs, qb_rec,
+            cmp, att, cmp_pct, yds, td, td_pct, int, int_pct, first_downs, succ_pct,
+            lng, y_a, ay_a, y_c, y_g, rate, qbr, sk, sk_yds, sk_pct, ny_a, any_a,
+            four_qc, gwd, awards, player_additional, scraped_at, updated_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (pfr_id, season) 
         DO UPDATE SET
+            player_name = EXCLUDED.player_name,
+            player_url = EXCLUDED.player_url,
+            rk = EXCLUDED.rk,
+            age = EXCLUDED.age,
             team = EXCLUDED.team,
-            games_played = EXCLUDED.games_played,
-            games_started = EXCLUDED.games_started,
-            completions = EXCLUDED.completions,
-            attempts = EXCLUDED.attempts,
-            completion_pct = EXCLUDED.completion_pct,
-            pass_yards = EXCLUDED.pass_yards,
-            pass_tds = EXCLUDED.pass_tds,
-            interceptions = EXCLUDED.interceptions,
-            longest_pass = EXCLUDED.longest_pass,
-            rating = EXCLUDED.rating,
-            sacks = EXCLUDED.sacks,
-            sack_yards = EXCLUDED.sack_yards,
-            net_yards_per_attempt = EXCLUDED.net_yards_per_attempt,
+            pos = EXCLUDED.pos,
+            g = EXCLUDED.g,
+            gs = EXCLUDED.gs,
+            qb_rec = EXCLUDED.qb_rec,
+            cmp = EXCLUDED.cmp,
+            att = EXCLUDED.att,
+            cmp_pct = EXCLUDED.cmp_pct,
+            yds = EXCLUDED.yds,
+            td = EXCLUDED.td,
+            td_pct = EXCLUDED.td_pct,
+            int = EXCLUDED.int,
+            int_pct = EXCLUDED.int_pct,
+            first_downs = EXCLUDED.first_downs,
+            succ_pct = EXCLUDED.succ_pct,
+            lng = EXCLUDED.lng,
+            y_a = EXCLUDED.y_a,
+            ay_a = EXCLUDED.ay_a,
+            y_c = EXCLUDED.y_c,
+            y_g = EXCLUDED.y_g,
+            rate = EXCLUDED.rate,
+            qbr = EXCLUDED.qbr,
+            sk = EXCLUDED.sk,
+            sk_yds = EXCLUDED.sk_yds,
+            sk_pct = EXCLUDED.sk_pct,
+            ny_a = EXCLUDED.ny_a,
+            any_a = EXCLUDED.any_a,
+            four_qc = EXCLUDED.four_qc,
+            gwd = EXCLUDED.gwd,
+            awards = EXCLUDED.awards,
+            player_additional = EXCLUDED.player_additional,
             scraped_at = EXCLUDED.scraped_at,
             updated_at = EXCLUDED.updated_at
         """
@@ -235,11 +280,13 @@ class DatabaseManager:
             values = []
             for stat in stats_list:
                 values.append((
-                    stat.pfr_id, stat.season, stat.team, stat.games_played, stat.games_started,
-                    stat.completions, stat.attempts, stat.completion_pct, stat.pass_yards,
-                    stat.pass_tds, stat.interceptions, stat.longest_pass, stat.rating,
-                    stat.sacks, stat.sack_yards, stat.net_yards_per_attempt,
-                    stat.scraped_at, stat.updated_at
+                    stat.pfr_id, stat.player_name, stat.player_url, stat.season, stat.rk,
+                    stat.age, stat.team, stat.pos, stat.g, stat.gs, stat.qb_rec, stat.cmp,
+                    stat.att, stat.cmp_pct, stat.yds, stat.td, stat.td_pct, stat.int,
+                    stat.int_pct, stat.first_downs, stat.succ_pct, stat.lng, stat.y_a,
+                    stat.ay_a, stat.y_c, stat.y_g, stat.rate, stat.qbr, stat.sk, stat.sk_yds,
+                    stat.sk_pct, stat.ny_a, stat.any_a, stat.four_qc, stat.gwd, stat.awards,
+                    stat.player_additional, stat.scraped_at, stat.updated_at
                 ))
             
             with self.get_connection() as conn:
@@ -268,16 +315,32 @@ class DatabaseManager:
             return 0
         
         insert_query = """
-        INSERT INTO qb_advanced_stats (
-            pfr_id, season, qbr, adjusted_net_yards_per_attempt,
-            fourth_quarter_comebacks, game_winning_drives, scraped_at, updated_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (pfr_id, season) 
+        INSERT INTO qb_splits_type2 (
+            pfr_id, player_name, season, split, value, cmp, att, inc, cmp_pct,
+            yds, td, first_downs, int, rate, sk, sk_yds, y_a, ay_a,
+            rush_att, rush_yds, rush_y_a, rush_td, rush_first_downs,
+            scraped_at, updated_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (pfr_id, season, split, value) 
         DO UPDATE SET
-            qbr = EXCLUDED.qbr,
-            adjusted_net_yards_per_attempt = EXCLUDED.adjusted_net_yards_per_attempt,
-            fourth_quarter_comebacks = EXCLUDED.fourth_quarter_comebacks,
-            game_winning_drives = EXCLUDED.game_winning_drives,
+            cmp = EXCLUDED.cmp,
+            att = EXCLUDED.att,
+            inc = EXCLUDED.inc,
+            cmp_pct = EXCLUDED.cmp_pct,
+            yds = EXCLUDED.yds,
+            td = EXCLUDED.td,
+            first_downs = EXCLUDED.first_downs,
+            int = EXCLUDED.int,
+            rate = EXCLUDED.rate,
+            sk = EXCLUDED.sk,
+            sk_yds = EXCLUDED.sk_yds,
+            y_a = EXCLUDED.y_a,
+            ay_a = EXCLUDED.ay_a,
+            rush_att = EXCLUDED.rush_att,
+            rush_yds = EXCLUDED.rush_yds,
+            rush_y_a = EXCLUDED.rush_y_a,
+            rush_td = EXCLUDED.rush_td,
+            rush_first_downs = EXCLUDED.rush_first_downs,
             scraped_at = EXCLUDED.scraped_at,
             updated_at = EXCLUDED.updated_at
         """
@@ -287,9 +350,11 @@ class DatabaseManager:
             values = []
             for stat in stats_list:
                 values.append((
-                    stat.pfr_id, stat.season, stat.qbr, stat.adjusted_net_yards_per_attempt,
-                    stat.fourth_quarter_comebacks, stat.game_winning_drives,
-                    stat.scraped_at, stat.updated_at
+                    stat.pfr_id, stat.player_name, stat.season, stat.split, stat.value,
+                    stat.cmp, stat.att, stat.inc, stat.cmp_pct, stat.yds, stat.td,
+                    stat.first_downs, stat.int, stat.rate, stat.sk, stat.sk_yds,
+                    stat.y_a, stat.ay_a, stat.rush_att, stat.rush_yds, stat.rush_y_a,
+                    stat.rush_td, stat.rush_first_downs, stat.scraped_at, stat.updated_at
                 ))
             
             with self.get_connection() as conn:
@@ -316,73 +381,67 @@ class DatabaseManager:
         """
         if not splits_list:
             return 0
-        
+            
         insert_query = """
-        INSERT INTO qb_splits (
-            pfr_id, season, split_type, split_category,
-            games, completions, attempts, completion_pct, pass_yards, pass_tds,
-            interceptions, rating, sacks, sack_yards, net_yards_per_attempt,
-            rush_attempts, rush_yards, rush_tds, fumbles, fumbles_lost,
-            fumbles_forced, fumbles_recovered, fumble_recovery_yards,
-            fumble_recovery_tds, incompletions, wins, losses, ties,
-            attempts_per_game, yards_per_game, rush_attempts_per_game,
-            rush_yards_per_game, total_tds, points, scraped_at, updated_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (pfr_id, season, split_type, split_category)
+        INSERT INTO qb_splits_type1 (
+            pfr_id, player_name, season, split, value, g, w, l, t, cmp, att, inc,
+            cmp_pct, yds, td, int, rate, sk, sk_yds, y_a, ay_a, a_g, y_g,
+            rush_att, rush_yds, rush_y_a, rush_td, rush_a_g, rush_y_g,
+            total_td, pts, fmb, fl, ff, fr, fr_yds, fr_td, scraped_at, updated_at
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        )
+        ON CONFLICT (pfr_id, season, split, value)
         DO UPDATE SET
-            games = EXCLUDED.games,
-            completions = EXCLUDED.completions,
-            attempts = EXCLUDED.attempts,
-            completion_pct = EXCLUDED.completion_pct,
-            pass_yards = EXCLUDED.pass_yards,
-            pass_tds = EXCLUDED.pass_tds,
-            interceptions = EXCLUDED.interceptions,
-            rating = EXCLUDED.rating,
-            sacks = EXCLUDED.sacks,
-            sack_yards = EXCLUDED.sack_yards,
-            net_yards_per_attempt = EXCLUDED.net_yards_per_attempt,
-            rush_attempts = EXCLUDED.rush_attempts,
-            rush_yards = EXCLUDED.rush_yards,
-            rush_tds = EXCLUDED.rush_tds,
-            fumbles = EXCLUDED.fumbles,
-            fumbles_lost = EXCLUDED.fumbles_lost,
-            fumbles_forced = EXCLUDED.fumbles_forced,
-            fumbles_recovered = EXCLUDED.fumbles_recovered,
-            fumble_recovery_yards = EXCLUDED.fumble_recovery_yards,
-            fumble_recovery_tds = EXCLUDED.fumble_recovery_tds,
-            incompletions = EXCLUDED.incompletions,
-            wins = EXCLUDED.wins,
-            losses = EXCLUDED.losses,
-            ties = EXCLUDED.ties,
-            attempts_per_game = EXCLUDED.attempts_per_game,
-            yards_per_game = EXCLUDED.yards_per_game,
-            rush_attempts_per_game = EXCLUDED.rush_attempts_per_game,
-            rush_yards_per_game = EXCLUDED.rush_yards_per_game,
-            total_tds = EXCLUDED.total_tds,
-            points = EXCLUDED.points,
-            scraped_at = EXCLUDED.scraped_at,
+            g = EXCLUDED.g,
+            w = EXCLUDED.w,
+            l = EXCLUDED.l,
+            t = EXCLUDED.t,
+            cmp = EXCLUDED.cmp,
+            att = EXCLUDED.att,
+            inc = EXCLUDED.inc,
+            cmp_pct = EXCLUDED.cmp_pct,
+            yds = EXCLUDED.yds,
+            td = EXCLUDED.td,
+            int = EXCLUDED.int,
+            rate = EXCLUDED.rate,
+            sk = EXCLUDED.sk,
+            sk_yds = EXCLUDED.sk_yds,
+            y_a = EXCLUDED.y_a,
+            ay_a = EXCLUDED.ay_a,
+            a_g = EXCLUDED.a_g,
+            y_g = EXCLUDED.y_g,
+            rush_att = EXCLUDED.rush_att,
+            rush_yds = EXCLUDED.rush_yds,
+            rush_y_a = EXCLUDED.rush_y_a,
+            rush_td = EXCLUDED.rush_td,
+            rush_a_g = EXCLUDED.rush_a_g,
+            rush_y_g = EXCLUDED.rush_y_g,
+            total_td = EXCLUDED.total_td,
+            pts = EXCLUDED.pts,
+            fmb = EXCLUDED.fmb,
+            fl = EXCLUDED.fl,
+            ff = EXCLUDED.ff,
+            fr = EXCLUDED.fr,
+            fr_yds = EXCLUDED.fr_yds,
+            fr_td = EXCLUDED.fr_td,
             updated_at = EXCLUDED.updated_at
         """
         
+        values = []
+        for split in splits_list:
+            values.append((
+                split.pfr_id, split.player_name, split.season, split.split, split.value,
+                split.g, split.w, split.l, split.t, split.cmp, split.att, split.inc,
+                split.cmp_pct, split.yds, split.td, split.int, split.rate, split.sk,
+                split.sk_yds, split.y_a, split.ay_a, split.a_g, split.y_g,
+                split.rush_att, split.rush_yds, split.rush_y_a, split.rush_td,
+                split.rush_a_g, split.rush_y_g, split.total_td, split.pts,
+                split.fmb, split.fl, split.ff, split.fr, split.fr_yds, split.fr_td,
+                split.scraped_at, split.updated_at
+            ))
+        
         try:
-            # Convert dataclass objects to tuples
-            values = []
-            for split in splits_list:
-                values.append((
-                    split.pfr_id, split.season, split.split_type, split.split_category,
-                    split.games, split.completions, split.attempts, split.completion_pct,
-                    split.pass_yards, split.pass_tds, split.interceptions, split.rating,
-                    split.sacks, split.sack_yards, split.net_yards_per_attempt,
-                    split.rush_attempts, split.rush_yards, split.rush_tds,
-                    split.fumbles, split.fumbles_lost, split.fumbles_forced,
-                    split.fumbles_recovered, split.fumble_recovery_yards,
-                    split.fumble_recovery_tds, split.incompletions, split.wins,
-                    split.losses, split.ties, split.attempts_per_game,
-                    split.yards_per_game, split.rush_attempts_per_game,
-                    split.rush_yards_per_game, split.total_tds, split.points,
-                    split.scraped_at, split.updated_at
-                ))
-            
             with self.get_connection() as conn:
                 with self.get_cursor(conn) as cur:
                     execute_batch(cur, insert_query, values, page_size=100)
@@ -406,20 +465,20 @@ class DatabaseManager:
             Number of records inserted
         """
         insert_query = """
-        INSERT INTO scraping_logs (
+        INSERT INTO scraping_log (
             session_id, season, start_time, end_time, total_requests,
-            successful_requests, failed_requests, total_qb_basic_stats,
-            total_qb_advanced_stats, total_qb_splits, errors, warnings,
+            successful_requests, failed_requests, total_players, total_passing_stats,
+            total_splits_type1, total_splits_type2, errors, warnings,
             rate_limit_violations, processing_time_seconds, created_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         
         try:
             values = [(
                 log.session_id, log.season, log.start_time, log.end_time,
                 log.total_requests, log.successful_requests, log.failed_requests,
-                log.total_basic_stats, log.total_advanced_stats, log.total_qb_splits,
-                log.errors, log.warnings, log.rate_limit_violations,
+                log.total_players, log.total_passing_stats, log.total_splits_type1,
+                log.total_splits_type2, log.errors, log.warnings, log.rate_limit_violations,
                 log.processing_time_seconds, log.created_at
             )]
             
@@ -446,20 +505,20 @@ class DatabaseManager:
                     cur.execute("SELECT COUNT(*) as count FROM players")
                     stats['total_players'] = cur.fetchone()['count']
                     
-                    # Count basic stats
-                    cur.execute("SELECT COUNT(*) as count FROM qb_basic_stats")
-                    stats['total_basic_stats'] = cur.fetchone()['count']
+                    # Count passing stats
+                    cur.execute("SELECT COUNT(*) as count FROM qb_passing_stats")
+                    stats['total_passing_stats'] = cur.fetchone()['count']
                     
-                    # Count advanced stats
-                    cur.execute("SELECT COUNT(*) as count FROM qb_advanced_stats")
-                    stats['total_advanced_stats'] = cur.fetchone()['count']
+                    # Count splits type 1
+                    cur.execute("SELECT COUNT(*) as count FROM qb_splits_type1")
+                    stats['total_splits_type1'] = cur.fetchone()['count']
                     
-                    # Count splits
-                    cur.execute("SELECT COUNT(*) as count FROM qb_splits")
-                    stats['total_splits'] = cur.fetchone()['count']
+                    # Count splits type 2
+                    cur.execute("SELECT COUNT(*) as count FROM qb_splits_type2")
+                    stats['total_splits_type2'] = cur.fetchone()['count']
                     
                     # Count scraping logs
-                    cur.execute("SELECT COUNT(*) as count FROM scraping_logs")
+                    cur.execute("SELECT COUNT(*) as count FROM scraping_log")
                     stats['total_scraping_logs'] = cur.fetchone()['count']
                     
                     return stats
@@ -476,38 +535,38 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 with self.get_cursor(conn) as cur:
                     
-                    # Check for orphaned basic stats
+                    # Check for orphaned passing stats
                     cur.execute("""
                         SELECT COUNT(*) as count 
-                        FROM qb_basic_stats bs 
-                        LEFT JOIN players p ON bs.pfr_id = p.pfr_id 
+                        FROM qb_passing_stats ps 
+                        LEFT JOIN players p ON ps.pfr_id = p.pfr_id 
                         WHERE p.pfr_id IS NULL
                     """)
-                    orphaned_basic = cur.fetchone()['count']
-                    if orphaned_basic > 0:
-                        errors['qb_basic_stats'] = [f"{orphaned_basic} records without matching player"]
+                    orphaned_passing = cur.fetchone()['count']
+                    if orphaned_passing > 0:
+                        errors['qb_passing_stats'] = [f"{orphaned_passing} records without matching player"]
                     
-                    # Check for orphaned advanced stats
+                    # Check for orphaned splits type 1
                     cur.execute("""
                         SELECT COUNT(*) as count 
-                        FROM qb_advanced_stats ads 
-                        LEFT JOIN players p ON ads.pfr_id = p.pfr_id 
+                        FROM qb_splits_type1 st1 
+                        LEFT JOIN players p ON st1.pfr_id = p.pfr_id 
                         WHERE p.pfr_id IS NULL
                     """)
-                    orphaned_advanced = cur.fetchone()['count']
-                    if orphaned_advanced > 0:
-                        errors['qb_advanced_stats'] = [f"{orphaned_advanced} records without matching player"]
+                    orphaned_splits_type1 = cur.fetchone()['count']
+                    if orphaned_splits_type1 > 0:
+                        errors['qb_splits_type1'] = [f"{orphaned_splits_type1} records without matching player"]
                     
-                    # Check for orphaned splits
+                    # Check for orphaned splits type 2
                     cur.execute("""
                         SELECT COUNT(*) as count 
-                        FROM qb_splits s 
-                        LEFT JOIN players p ON s.pfr_id = p.pfr_id 
+                        FROM qb_splits_type2 st2 
+                        LEFT JOIN players p ON st2.pfr_id = p.pfr_id 
                         WHERE p.pfr_id IS NULL
                     """)
-                    orphaned_splits = cur.fetchone()['count']
-                    if orphaned_splits > 0:
-                        errors['qb_splits'] = [f"{orphaned_splits} records without matching player"]
+                    orphaned_splits_type2 = cur.fetchone()['count']
+                    if orphaned_splits_type2 > 0:
+                        errors['qb_splits_type2'] = [f"{orphaned_splits_type2} records without matching player"]
                     
         except Exception as e:
             logger.error(f"Error validating data integrity: {e}")
@@ -535,7 +594,7 @@ class DatabaseManager:
                             SELECT COUNT(*) as count 
                             FROM information_schema.tables 
                             WHERE table_schema = 'public' 
-                            AND table_name IN ('players', 'qb_basic_stats', 'qb_advanced_stats', 'qb_splits', 'scraping_logs')
+                            AND table_name IN ('players', 'qb_passing_stats', 'qb_splits_type1', 'qb_splits_type2', 'scraping_log')
                         """)
                         table_count = cur.fetchone()['count']
                         health['tables_exist'] = table_count == 5

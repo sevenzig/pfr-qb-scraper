@@ -1,5 +1,31 @@
 # NFL QB Data Scraping System
 
+Of course. Based on my evaluation of the codebase, I can determine the project's purpose.
+
+### Purpose of the Application
+
+The primary purpose of this project is to create a robust and automated data pipeline for **scraping, processing, and storing NFL quarterback statistics** from the sports reference website *Pro Football Reference*.
+
+Here is a breakdown of its key objectives and features, as identified from the code:
+
+1.  **Comprehensive Data Scraping:** The application is designed to systematically collect a wide range of quarterback data. This isn't limited to basic season totals; it also captures:
+    *   **Advanced Statistics:** Deeper metrics beyond standard passing and rushing numbers.
+    *   **Game Splits:** Highly detailed situational statistics, such as a quarterback's performance under specific conditions (e.g., home vs. away, on grass vs. turf, in different quarters, or against winning vs. losing teams).
+
+2.  **Robust and Respectful Scraping:** The scripts are built to be reliable and considerate of the website they are scraping. Features like rate limiting, automatic retries with exponential backoff, and concurrent processing show an emphasis on collecting data efficiently without overwhelming the source server.
+
+3.  **Structured Data Storage:** After the data is scraped and processed, it is stored in a structured **PostgreSQL database**. The project is specifically configured to integrate with **Supabase**, a backend-as-a-service platform that provides a PostgreSQL database along with other features. The `sql/schema.sql` file defines a well-organized database structure to ensure data integrity and efficient querying.
+
+4.  **Data Management and Maintenance:** The project includes a command-line interface (CLI) for managing the entire data pipeline. This CLI allows a user to:
+    *   Initiate scraping for specific seasons or players.
+    *   Validate the integrity of the data in the database.
+    *   Monitor the health of the system and review performance metrics.
+    *   Clean up old logs and data.
+
+5.  **Enable Downstream Applications:** The inclusion of a **Drizzle ORM** schema and **TypeScript** type definitions strongly indicates that the collected data is intended to be consumed by other applications, most likely a web-based front-end. This project serves as the foundational data layer, providing clean, reliable, and type-safe data for building analytical tools, dashboards, or other user-facing applications that display NFL QB statistics.
+
+In essence, this project is a complete data engineering solution for creating and maintaining a specialized dataset of NFL quarterback performance, with a clear path toward powering a modern data-driven application.
+
 ## Quickstart
 
 Follow these steps to set up the project, initialize the database, and run your first scrape:
@@ -10,7 +36,19 @@ Follow these steps to set up the project, initialize the database, and run your 
    cd qb-scraper
    ```
 
-2. **Install Python dependencies**
+2. **Create and activate a virtual environment**
+   ```bash
+   # Create a virtual environment named 'venv'
+   python -m venv venv
+
+   # Activate the virtual environment
+   # On Windows
+   venv\\Scripts\\activate
+   # On macOS/Linux
+   source venv/bin/activate
+   ```
+
+3. **Install Python dependencies**
    ```bash
    # Using uv (recommended)
    uv sync
@@ -18,7 +56,7 @@ Follow these steps to set up the project, initialize the database, and run your 
    pip install -r requirements.txt
    ```
 
-3. **Set up environment variables**
+4. **Set up environment variables**
    - Copy the example file and edit as needed:
      ```bash
      cp env.example .env
@@ -29,7 +67,7 @@ Follow these steps to set up the project, initialize the database, and run your 
      python scripts/setup_supabase_env.py
      ```
 
-4. **Initialize the Supabase/Postgres database**
+5. **Initialize the Supabase/Postgres database**
    - Create a new database on [Supabase](https://app.supabase.com/) or your local Postgres instance.
    - Deploy the schema:
      ```bash
@@ -38,13 +76,13 @@ Follow these steps to set up the project, initialize the database, and run your 
      python scripts/deploy_schema_to_supabase.py
      ```
 
-5. **(Optional) Populate teams table**
+6. **(Optional) Populate teams table**
    - If your schema requires NFL teams, run:
      ```bash
      python scripts/populate_teams.py
      ```
 
-6. **Run the main scraping script**
+7. **Run the main scraping script**
    - To scrape all QB data for the 2024 season:
      ```bash
      python scripts/scrape_qb_data_2024.py
@@ -55,11 +93,11 @@ Follow these steps to set up the project, initialize the database, and run your 
      ```
    - For quick tests or debugging, see scripts in the `scripts/` and `debug/` directories.
 
-7. **Check logs and results**
+8. **Check logs and results**
    - Logs are stored in the `logs/` directory.
    - Data files and outputs may be in `data/` or your configured database.
 
-8. **Run tests**
+9. **Run tests**
    - To verify your setup:
      ```bash
      pytest
@@ -182,7 +220,19 @@ qb-scraper/
    cd qb-scraper
    ```
 
-2. **Install Python dependencies**:
+2. **Create and activate a virtual environment**
+   ```bash
+   # Create a virtual environment named 'venv'
+   python -m venv venv
+
+   # Activate the virtual environment
+   # On Windows
+   venv\\Scripts\\activate
+   # On macOS/Linux
+   source venv/bin/activate
+   ```
+
+3. **Install Python dependencies**:
    ```bash
    # Using uv (recommended)
    uv sync
@@ -191,7 +241,7 @@ qb-scraper/
    pip install -r requirements.txt
    ```
 
-3. **Set up environment variables**:
+4. **Set up environment variables**:
    ```bash
    # Interactive setup (recommended)
    python setup_env.py
@@ -201,7 +251,7 @@ qb-scraper/
    # Edit .env with your database credentials and configuration
    ```
 
-4. **Set up database**:
+5. **Set up database**:
    - Create a PostgreSQL database (local or Supabase)
    - Run the schema: `psql -d your_database -f sql/schema.sql`
    - Update `DATABASE_URL` in your `.env` file
