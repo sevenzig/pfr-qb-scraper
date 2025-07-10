@@ -2,22 +2,25 @@
 
 ## Overview
 
-This document outlines the major improvements made to the NFL QB data scraping project schema to enhance data quality, normalization, and maintainability.
+This document outlines the major improvements made to the NFL QB data scraping
+project schema to enhance data quality, normalization, and maintainability.
 
 ## Key Improvements
 
 ### 1. PFR Unique IDs as Primary Keys
 
-**Before**: Used generated player IDs based on player names
-**After**: Use PFR unique IDs (e.g., 'burrjo01' for Joe Burrow) as primary keys
+**Before**: Used generated player IDs based on player names **After**: Use PFR
+unique IDs (e.g., 'burrjo01' for Joe Burrow) as primary keys
 
 **Benefits**:
+
 - Consistent identification across different data sources
 - No conflicts from name variations or duplicates
 - Direct mapping to Pro Football Reference URLs
 - Better data integrity and referential consistency
 
 **Implementation**:
+
 - Added `extract_pfr_id()` function to parse PFR URLs
 - Updated `generate_player_id()` to prioritize PFR IDs
 - All tables now use `pfr_id` as the primary key or foreign key
@@ -26,11 +29,13 @@ This document outlines the major improvements made to the NFL QB data scraping p
 
 **Before**: Single `qb_stats` table with all statistics mixed together
 **After**: Three separate tables:
+
 - `players` - Player master data
 - `qb_basic_stats` - Basic season statistics
 - `qb_advanced_stats` - Advanced metrics
 
 **Benefits**:
+
 - Better data normalization
 - Easier to maintain and extend
 - Clear separation of concerns
@@ -39,7 +44,8 @@ This document outlines the major improvements made to the NFL QB data scraping p
 **Table Structure**:
 
 #### Players Table
-```sql
+
+````sql
 CREATE TABLE players (
     pfr_id VARCHAR(20) PRIMARY KEY,  -- PFR unique ID
     player_name VARCHAR(100) NOT NULL,
@@ -58,9 +64,9 @@ CREATE TABLE players (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-```
-
+```text
 #### QB Basic Stats Table
+
 ```sql
 CREATE TABLE qb_basic_stats (
     pfr_id VARCHAR(20) NOT NULL,
@@ -83,9 +89,9 @@ CREATE TABLE qb_basic_stats (
     FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE,
     FOREIGN KEY (team) REFERENCES teams(team_code) ON DELETE RESTRICT
 );
-```
-
+```text
 #### QB Advanced Stats Table
+
 ```sql
 CREATE TABLE qb_advanced_stats (
     pfr_id VARCHAR(20) NOT NULL,
@@ -97,11 +103,11 @@ CREATE TABLE qb_advanced_stats (
     PRIMARY KEY (pfr_id, season),
     FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE
 );
-```
-
+```text
 ### 3. Enhanced QB Splits Table
 
 **Improvements**:
+
 - Added comprehensive rush statistics
 - Added fumble statistics (total, lost, forced, recovered)
 - Added game outcome statistics (wins, losses, ties)
@@ -110,6 +116,7 @@ CREATE TABLE qb_advanced_stats (
 - Better validation constraints
 
 **New Fields**:
+
 - `rush_attempts`, `rush_yards`, `rush_tds`
 - `fumbles`, `fumbles_lost`, `fumbles_forced`, `fumbles_recovered`
 - `fumble_recovery_yards`, `fumble_recovery_tds`
@@ -122,21 +129,23 @@ CREATE TABLE qb_advanced_stats (
 ### 4. Improved Data Validation
 
 **Enhanced Constraints**:
+
 - Logical consistency checks (e.g., completions ≤ attempts)
 - Range validation for all numeric fields
 - Foreign key relationships with proper cascade/restrict rules
 - Check constraints for business rules
 
 **Examples**:
+
 ```sql
 CONSTRAINT valid_completion_ratio CHECK (attempts = 0 OR (completions <= attempts))
 CONSTRAINT valid_fumbles_lost CHECK (fumbles_lost <= fumbles)
 CONSTRAINT valid_total_tds CHECK (total_tds >= (pass_tds + rush_tds + fumble_recovery_tds))
-```
-
+```text
 ### 5. Updated Python Models
 
 **New Model Classes**:
+
 - `Player` - Player master data with PFR ID
 - `QBBasicStats` - Basic season statistics
 - `QBAdvancedStats` - Advanced metrics
@@ -145,6 +154,7 @@ CONSTRAINT valid_total_tds CHECK (total_tds >= (pass_tds + rush_tds + fumble_rec
 - `ScrapingLog` - Enhanced logging with separated stats counts
 
 **Features**:
+
 - Comprehensive validation methods
 - `from_dict()` factory methods
 - Type hints for all fields
@@ -154,6 +164,7 @@ CONSTRAINT valid_total_tds CHECK (total_tds >= (pass_tds + rush_tds + fumble_rec
 ### 6. Enhanced Database Views
 
 **New Views**:
+
 - `qb_season_summary` - Combines basic and advanced stats
 - `qb_home_away_splits` - Home vs away performance
 - `qb_quarter_performance` - Performance by quarter
@@ -161,6 +172,7 @@ CONSTRAINT valid_total_tds CHECK (total_tds >= (pass_tds + rush_tds + fumble_rec
 - `qb_vs_winning_teams` - Performance vs quality opponents
 
 **Benefits**:
+
 - Pre-computed common queries
 - Consistent data presentation
 - Performance optimization
@@ -169,25 +181,29 @@ CONSTRAINT valid_total_tds CHECK (total_tds >= (pass_tds + rush_tds + fumble_rec
 ### 7. Improved Indexing Strategy
 
 **New Indexes**:
+
 - Composite indexes for common query patterns
 - Performance indexes for sorting and filtering
 - Foreign key indexes for join optimization
 
 **Examples**:
+
 ```sql
 CREATE INDEX idx_qb_basic_stats_season_rating ON qb_basic_stats(season, rating DESC);
 CREATE INDEX idx_qb_splits_player_season ON qb_splits(pfr_id, season);
 CREATE INDEX idx_qb_basic_stats_team_season ON qb_basic_stats(team, season);
-```
-
+```text
 ## Migration Strategy
 
 ### For Existing Data
 
-1. **Extract PFR IDs**: Use the new `extract_pfr_id()` function to identify PFR IDs from existing URLs
+1. **Extract PFR IDs**: Use the new `extract_pfr_id()` function to identify PFR
+   IDs from existing URLs
 2. **Create Players**: Insert player records with PFR IDs as primary keys
-3. **Split Statistics**: Separate existing `qb_stats` data into `qb_basic_stats` and `qb_advanced_stats`
-4. **Update Foreign Keys**: Update all references to use PFR IDs instead of generated IDs
+3. **Split Statistics**: Separate existing `qb_stats` data into `qb_basic_stats`
+   and `qb_advanced_stats`
+4. **Update Foreign Keys**: Update all references to use PFR IDs instead of
+   generated IDs
 5. **Validate Data**: Run validation on all migrated data
 
 ### For New Data
@@ -200,23 +216,27 @@ CREATE INDEX idx_qb_basic_stats_team_season ON qb_basic_stats(team, season);
 ## Benefits Summary
 
 ### Data Quality
+
 - Consistent player identification
 - Better data normalization
 - Comprehensive validation
 - Reduced data redundancy
 
 ### Performance
+
 - Optimized indexes for common queries
 - Separated tables for focused queries
 - Better join performance with proper foreign keys
 
 ### Maintainability
+
 - Clear table structure
 - Separated concerns
 - Comprehensive documentation
 - Type-safe Python models
 
 ### Extensibility
+
 - Easy to add new player attributes
 - Flexible splits structure
 - Modular design for future enhancements
@@ -248,4 +268,7 @@ All improvements have been tested with comprehensive test suites:
 - `src/scrapers/enhanced_scraper.py` - Updated to use new models
 - `test_new_schema.py` - Comprehensive test suite
 
-This represents a significant improvement in the project's data architecture, making it more robust, maintainable, and scalable for future NFL data analysis needs. 
+This represents a significant improvement in the project's data architecture,
+making it more robust, maintainable, and scalable for future NFL data analysis
+needs.
+````

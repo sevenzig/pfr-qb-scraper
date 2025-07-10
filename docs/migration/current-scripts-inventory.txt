@@ -1,0 +1,17 @@
+
+    Directory: C:\Users\scootypuffjr\Projects\pfr-qb-scraper\scripts
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d----            7/9/2025 11:27 AM                __pycache__
+-a---            7/8/2025 11:04 AM             58 __init__.py
+-a---            7/9/2025 10:56 AM           2884 clear_qb_data.py
+-a---            7/9/2025 11:38 AM          32081 enhanced_qb_scraper.py
+-a---            7/8/2025  3:00 PM           4748 populate_teams.py
+-a---            7/9/2025  8:48 AM          14593 robust_qb_scraper.py
+-a---            7/9/2025 11:38 AM          17442 scrape_qb_data_2024.py
+-a---            7/8/2025 11:04 AM              1 setup_ide.py
+-a---            7/8/2025 11:04 AM          18759 simple_scrape.py
+-a---            7/9/2025 10:02 AM           2842 update_qb_stats_team_codes.py
+-a---            7/9/2025  9:53 AM           2701 update_teams_to_pfr_codes.py
+

@@ -1,6 +1,7 @@
 # Single Player Scraping Guide
 
-This guide shows you how to scrape data for a single NFL QB player using the improved schema with PFR IDs and separated tables.
+This guide shows you how to scrape data for a single NFL QB player using the
+improved schema with PFR IDs and separated tables.
 
 ## Quick Start (Easiest Method)
 
@@ -8,19 +9,18 @@ This guide shows you how to scrape data for a single NFL QB player using the imp
 
 Edit `player_config.py` and change these lines:
 
-```python
+````python
 PLAYER_NAME = "Joe Burrow"  # Change to any QB name
 SEASON = 2024  # Change to any season year
 SAVE_TO_DATABASE = True  # Set to False to only scrape without saving
-```
-
+```text
 ### 2. Run the Script
 
 ```bash
 python quick_scrape.py
-```
-
+```text
 That's it! The script will:
+
 - Find the player's PFR URL automatically
 - Extract their PFR ID (e.g., 'burrjo01' for Joe Burrow)
 - Scrape basic stats (completions, yards, TDs, etc.)
@@ -34,8 +34,7 @@ That's it! The script will:
 
 ```bash
 python scrape_single_player.py "Joe Burrow" 2024
-```
-
+```text
 ### Options
 
 ```bash
@@ -45,11 +44,11 @@ python scrape_single_player.py "Patrick Mahomes" 2023 --no-db
 # Examples
 python scrape_single_player.py "Josh Allen" 2024
 python scrape_single_player.py "Lamar Jackson" 2023 --no-db
-```
-
+```text
 ## Available Players
 
-You can scrape any QB from Pro Football Reference. Here are some popular examples:
+You can scrape any QB from Pro Football Reference. Here are some popular
+examples:
 
 - Joe Burrow
 - Patrick Mahomes
@@ -65,11 +64,13 @@ You can scrape any QB from Pro Football Reference. Here are some popular example
 ## What Gets Scraped
 
 ### 1. Player Information
+
 - PFR unique ID (e.g., 'burrjo01')
 - Player name and PFR URL
 - Basic biographical info
 
 ### 2. Basic Stats (Season Totals)
+
 - Games played/started
 - Completions/attempts and completion percentage
 - Passing yards, touchdowns, interceptions
@@ -78,12 +79,14 @@ You can scrape any QB from Pro Football Reference. Here are some popular example
 - Net yards per attempt
 
 ### 3. Advanced Stats
+
 - ESPN QBR (Total Quarterback Rating)
 - Adjusted net yards per attempt
 - Fourth quarter comebacks
 - Game-winning drives
 
 ### 4. Splits Data
+
 - Home vs Away performance
 - Performance by quarter
 - Red zone efficiency
@@ -120,12 +123,12 @@ SCRAPE_SPLITS = True
 # Logging
 LOG_LEVEL = "INFO"
 LOG_TO_FILE = True
-```
-
+```text
 ## Output Examples
 
 ### Successful Scrape
-```
+
+```text
 Quick Scrape - Joe Burrow (2024)
 ==================================================
 2024-01-15 10:30:15 - __main__ - INFO - Starting scrape for Joe Burrow (2024 season)
@@ -165,8 +168,7 @@ Splits Found: 15
 🎉 SUCCESS! Scraped data for Joe Burrow
 📊 Found 15 splits
 💾 Data saved to database
-```
-
+```text
 ## Troubleshooting
 
 ### Common Issues
@@ -192,6 +194,7 @@ Splits Found: 15
 ### Logs
 
 Check the logs for detailed information:
+
 - `logs/single_player_scraping.log` - Detailed scraping logs
 - `logs/main.log` - General application logs
 
@@ -214,8 +217,7 @@ for player in players:
         print(f"✓ Successfully scraped {player}")
     else:
         print(f"✗ Failed to scrape {player}")
-```
-
+```text
 ### Custom Database URL
 
 If you want to use a different database:
@@ -223,8 +225,7 @@ If you want to use a different database:
 ```python
 # In player_config.py
 DATABASE_URL = "postgresql://username:password@localhost:5432/nfl_qb_data"
-```
-
+```text
 Then modify the scraping script to use this URL.
 
 ## Data Quality
@@ -236,7 +237,8 @@ The scraper includes comprehensive validation:
 - PFR ID extraction and validation
 - Data type validation
 
-All validation errors are logged as warnings, so you can review them in the logs.
+All validation errors are logged as warnings, so you can review them in the
+logs.
 
 ## Performance
 
@@ -254,4 +256,6 @@ After scraping a player, you can:
 3. **Compare players** across different seasons
 4. **Build analytics** on the comprehensive dataset
 
-The new schema with PFR IDs and separated tables makes it easy to build sophisticated NFL QB analytics! 
+The new schema with PFR IDs and separated tables makes it easy to build
+sophisticated NFL QB analytics!
+````

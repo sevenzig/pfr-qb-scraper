@@ -460,8 +460,8 @@ class ScrapingLog:
     failed_requests: int = 0
     total_players: int = 0
     total_passing_stats: int = 0
-    total_splits_type1: int = 0
-    total_splits_type2: int = 0
+    total_splits: int = 0
+    total_splits_advanced: int = 0
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     rate_limit_violations: int = 0
@@ -496,11 +496,11 @@ class ScrapingLog:
         if self.total_passing_stats < 0:
             errors.append("Total passing stats cannot be negative")
         
-        if self.total_splits_type1 < 0:
-            errors.append("Total splits type 1 cannot be negative")
+        if self.total_splits < 0:
+            errors.append("Total splits cannot be negative")
         
-        if self.total_splits_type2 < 0:
-            errors.append("Total splits type 2 cannot be negative")
+        if self.total_splits_advanced < 0:
+            errors.append("Total splits advanced cannot be negative")
         
         if self.rate_limit_violations < 0:
             errors.append("Rate limit violations cannot be negative")
@@ -523,8 +523,8 @@ class ScrapingLog:
             failed_requests=data.get('failed_requests', 0),
             total_players=data.get('total_players', 0),
             total_passing_stats=data.get('total_passing_stats', 0),
-            total_splits_type1=data.get('total_splits_type1', 0),
-            total_splits_type2=data.get('total_splits_type2', 0),
+            total_splits=data.get('total_splits', 0),
+            total_splits_advanced=data.get('total_splits_advanced', 0),
             errors=data.get('errors', []),
             warnings=data.get('warnings', []),
             rate_limit_violations=data.get('rate_limit_violations', 0),
@@ -547,5 +547,7 @@ def generate_player_id(player_name: str, player_url: Optional[str] = None) -> st
 
 # Legacy aliases for backward compatibility
 QBBasicStats = QBPassingStats
+# QBSplitStats is the model for the qb_splits table (basic splits)
 QBSplitStats = QBSplitsType1
+# QBAdvancedStats is the model for the qb_splits_advanced table (advanced splits)
 QBAdvancedStats = QBSplitsType2 

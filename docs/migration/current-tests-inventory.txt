@@ -1,0 +1,21 @@
+
+    Directory: C:\Users\scootypuffjr\Projects\pfr-qb-scraper\tests
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---            7/8/2025 11:04 AM              1 quick_supabase_test.py
+-a---            7/8/2025 11:04 AM           2336 test_2024_passing.py
+-a---            7/8/2025 11:04 AM           1389 test_and_create_tables.py
+-a---            7/8/2025 11:04 AM              1 test_db_connection.py
+-a---            7/8/2025 11:04 AM           5932 test_enhanced_scraper_fields.py
+-a---            7/8/2025 11:04 AM          11362 test_joe_burrow.py
+-a---            7/8/2025 11:04 AM          12264 test_new_schema.py
+-a---            7/8/2025 11:04 AM           1956 test_parse_table.py
+-a---            7/8/2025 11:04 AM              1 test_qb_filtering.py
+-a---            7/8/2025 11:04 AM           3120 test_real_scraping.py
+-a---            7/8/2025 11:04 AM           2790 test_split_types.py
+-a---            7/8/2025 11:04 AM           4357 test_splits_fix.py
+-a---            7/8/2025 11:04 AM              1 test_supabase_connection.py
+-a---            7/8/2025 11:04 AM              1 test_system.py
+-a---            7/8/2025 11:04 AM           2199 verify_joe_burrow_data.py
+

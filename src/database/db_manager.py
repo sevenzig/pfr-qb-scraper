@@ -15,7 +15,7 @@ from psycopg2.pool import SimpleConnectionPool
 from psycopg2.extras import RealDictCursor, execute_batch
 from psycopg2.extensions import connection
 
-from models.qb_models import QBBasicStats, QBAdvancedStats, QBSplitStats, Player, Team, ScrapingLog
+from models.qb_models import QBBasicStats, QBAdvancedStats, QBSplitStats, QBSplitsType2, Player, Team, ScrapingLog
 from config.config import config
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ class DatabaseManager:
     def __init__(self, connection_string: Optional[str] = None):
         self.connection_string = connection_string or config.get_database_url()
         self.pool: Optional[SimpleConnectionPool] = None
+        self.logger = logging.getLogger(__name__)
         self._initialize_pool()
         
     def _initialize_pool(self) -> None:
@@ -315,7 +316,7 @@ class DatabaseManager:
             return 0
         
         insert_query = """
-        INSERT INTO qb_splits_type2 (
+        INSERT INTO qb_splits_advanced (
             pfr_id, player_name, season, split, value, cmp, att, inc, cmp_pct,
             yds, td, first_downs, int, rate, sk, sk_yds, y_a, ay_a,
             rush_att, rush_yds, rush_y_a, rush_td, rush_first_downs,
@@ -371,28 +372,17 @@ class DatabaseManager:
     
     def insert_qb_splits(self, splits_list: List[QBSplitStats]) -> int:
         """
-        Insert QB splits with conflict resolution
-        
-        Args:
-            splits_list: List of QBSplitStats objects to insert
-            
-        Returns:
-            Number of records inserted/updated
+        Insert a list of QB splits (basic)
         """
-        if not splits_list:
-            return 0
-            
         insert_query = """
-        INSERT INTO qb_splits_type1 (
-            pfr_id, player_name, season, split, value, g, w, l, t, cmp, att, inc,
-            cmp_pct, yds, td, int, rate, sk, sk_yds, y_a, ay_a, a_g, y_g,
-            rush_att, rush_yds, rush_y_a, rush_td, rush_a_g, rush_y_g,
-            total_td, pts, fmb, fl, ff, fr, fr_yds, fr_td, scraped_at, updated_at
+        INSERT INTO qb_splits (
+            pfr_id, player_name, season, split, value, g, w, l, t, cmp, att, inc, cmp_pct, yds, td, int, rate, sk, sk_yds, y_a, ay_a, a_g, y_g, rush_att, rush_yds, rush_y_a, rush_td, rush_a_g, rush_y_g, total_td, pts, fmb, fl, ff, fr, fr_yds, fr_td, scraped_at, updated_at
         ) VALUES (
             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
         ON CONFLICT (pfr_id, season, split, value)
         DO UPDATE SET
+            player_name = EXCLUDED.player_name,
             g = EXCLUDED.g,
             w = EXCLUDED.w,
             l = EXCLUDED.l,
@@ -425,6 +415,7 @@ class DatabaseManager:
             fr = EXCLUDED.fr,
             fr_yds = EXCLUDED.fr_yds,
             fr_td = EXCLUDED.fr_td,
+            scraped_at = EXCLUDED.scraped_at,
             updated_at = EXCLUDED.updated_at
         """
         
@@ -454,6 +445,63 @@ class DatabaseManager:
             logger.error(f"Error inserting QB splits: {e}")
             raise
     
+    def insert_qb_splits_advanced(self, splits_list: List[QBSplitsType2]) -> int:
+        """
+        Insert a list of QB splits (advanced)
+        """
+        insert_query = """
+        INSERT INTO qb_splits_advanced (
+            pfr_id, player_name, season, split, value, cmp, att, inc, cmp_pct, yds, td, first_downs, int, rate, sk, sk_yds, y_a, ay_a, rush_att, rush_yds, rush_y_a, rush_td, rush_first_downs, scraped_at, updated_at
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        )
+        ON CONFLICT (pfr_id, season, split, value)
+        DO UPDATE SET
+            cmp = EXCLUDED.cmp,
+            att = EXCLUDED.att,
+            inc = EXCLUDED.inc,
+            cmp_pct = EXCLUDED.cmp_pct,
+            yds = EXCLUDED.yds,
+            td = EXCLUDED.td,
+            first_downs = EXCLUDED.first_downs,
+            int = EXCLUDED.int,
+            rate = EXCLUDED.rate,
+            sk = EXCLUDED.sk,
+            sk_yds = EXCLUDED.sk_yds,
+            y_a = EXCLUDED.y_a,
+            ay_a = EXCLUDED.ay_a,
+            rush_att = EXCLUDED.rush_att,
+            rush_yds = EXCLUDED.rush_yds,
+            rush_y_a = EXCLUDED.rush_y_a,
+            rush_td = EXCLUDED.rush_td,
+            rush_first_downs = EXCLUDED.rush_first_downs,
+            scraped_at = EXCLUDED.scraped_at,
+            updated_at = EXCLUDED.updated_at
+        """
+        
+        values = []
+        for split in splits_list:
+            values.append((
+                split.pfr_id, split.player_name, split.season, split.split, split.value,
+                split.cmp, split.att, split.inc, split.cmp_pct, split.yds, split.td,
+                split.first_downs, split.int, split.rate, split.sk, split.sk_yds,
+                split.y_a, split.ay_a, split.rush_att, split.rush_yds, split.rush_y_a,
+                split.rush_td, split.rush_first_downs, split.scraped_at, split.updated_at
+            ))
+        
+        try:
+            with self.get_connection() as conn:
+                with self.get_cursor(conn) as cur:
+                    execute_batch(cur, insert_query, values, page_size=100)
+                    conn.commit()
+            
+            logger.info(f"Inserted/updated {len(splits_list)} QB splits advanced records")
+            return len(splits_list)
+            
+        except Exception as e:
+            logger.error(f"Error inserting QB splits advanced: {e}")
+            raise
+    
     def insert_scraping_log(self, log: ScrapingLog) -> int:
         """
         Insert scraping log entry
@@ -465,10 +513,10 @@ class DatabaseManager:
             Number of records inserted
         """
         insert_query = """
-        INSERT INTO scraping_log (
+        INSERT INTO scraping_logs (
             session_id, season, start_time, end_time, total_requests,
             successful_requests, failed_requests, total_players, total_passing_stats,
-            total_splits_type1, total_splits_type2, errors, warnings,
+            total_splits, total_splits_advanced, errors, warnings,
             rate_limit_violations, processing_time_seconds, created_at
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
@@ -477,8 +525,8 @@ class DatabaseManager:
             values = [(
                 log.session_id, log.season, log.start_time, log.end_time,
                 log.total_requests, log.successful_requests, log.failed_requests,
-                log.total_players, log.total_passing_stats, log.total_splits_type1,
-                log.total_splits_type2, log.errors, log.warnings, log.rate_limit_violations,
+                log.total_players, log.total_passing_stats, log.total_splits,
+                log.total_splits_advanced, log.errors, log.warnings, log.rate_limit_violations,
                 log.processing_time_seconds, log.created_at
             )]
             
@@ -495,34 +543,17 @@ class DatabaseManager:
             raise
     
     def get_database_stats(self) -> Dict[str, Any]:
-        """Get database statistics"""
+        """
+        Get high-level database statistics for monitoring
+        """
         try:
             with self.get_connection() as conn:
                 with self.get_cursor(conn) as cur:
-                    stats = {}
-                    
-                    # Count players
-                    cur.execute("SELECT COUNT(*) as count FROM players")
-                    stats['total_players'] = cur.fetchone()['count']
-                    
-                    # Count passing stats
-                    cur.execute("SELECT COUNT(*) as count FROM qb_passing_stats")
-                    stats['total_passing_stats'] = cur.fetchone()['count']
-                    
-                    # Count splits type 1
-                    cur.execute("SELECT COUNT(*) as count FROM qb_splits_type1")
-                    stats['total_splits_type1'] = cur.fetchone()['count']
-                    
-                    # Count splits type 2
-                    cur.execute("SELECT COUNT(*) as count FROM qb_splits_type2")
-                    stats['total_splits_type2'] = cur.fetchone()['count']
-                    
-                    # Count scraping logs
-                    cur.execute("SELECT COUNT(*) as count FROM scraping_log")
-                    stats['total_scraping_logs'] = cur.fetchone()['count']
-                    
-                    return stats
-                    
+                    cur.execute("""
+                        SELECT * FROM database_stats
+                    """)
+                    stats = cur.fetchall()
+                    return {row['table_name']: row['record_count'] for row in stats}
         except Exception as e:
             logger.error(f"Error getting database stats: {e}")
             return {}
@@ -546,27 +577,27 @@ class DatabaseManager:
                     if orphaned_passing > 0:
                         errors['qb_passing_stats'] = [f"{orphaned_passing} records without matching player"]
                     
-                    # Check for orphaned splits type 1
+                    # Check for orphaned splits
                     cur.execute("""
                         SELECT COUNT(*) as count 
-                        FROM qb_splits_type1 st1 
+                        FROM qb_splits st1 
                         LEFT JOIN players p ON st1.pfr_id = p.pfr_id 
                         WHERE p.pfr_id IS NULL
                     """)
-                    orphaned_splits_type1 = cur.fetchone()['count']
-                    if orphaned_splits_type1 > 0:
-                        errors['qb_splits_type1'] = [f"{orphaned_splits_type1} records without matching player"]
+                    orphaned_splits = cur.fetchone()['count']
+                    if orphaned_splits > 0:
+                        errors['qb_splits'] = [f"{orphaned_splits} records without matching player"]
                     
-                    # Check for orphaned splits type 2
+                    # Check for orphaned splits advanced
                     cur.execute("""
                         SELECT COUNT(*) as count 
-                        FROM qb_splits_type2 st2 
+                        FROM qb_splits_advanced st2 
                         LEFT JOIN players p ON st2.pfr_id = p.pfr_id 
                         WHERE p.pfr_id IS NULL
                     """)
-                    orphaned_splits_type2 = cur.fetchone()['count']
-                    if orphaned_splits_type2 > 0:
-                        errors['qb_splits_type2'] = [f"{orphaned_splits_type2} records without matching player"]
+                    orphaned_splits_advanced = cur.fetchone()['count']
+                    if orphaned_splits_advanced > 0:
+                        errors['qb_splits_advanced'] = [f"{orphaned_splits_advanced} records without matching player"]
                     
         except Exception as e:
             logger.error(f"Error validating data integrity: {e}")
@@ -594,7 +625,7 @@ class DatabaseManager:
                             SELECT COUNT(*) as count 
                             FROM information_schema.tables 
                             WHERE table_schema = 'public' 
-                            AND table_name IN ('players', 'qb_passing_stats', 'qb_splits_type1', 'qb_splits_type2', 'scraping_log')
+                            AND table_name IN ('players', 'qb_passing_stats', 'qb_splits', 'qb_splits_advanced', 'scraping_logs')
                         """)
                         table_count = cur.fetchone()['count']
                         health['tables_exist'] = table_count == 5
@@ -608,7 +639,124 @@ class DatabaseManager:
             logger.error(f"Health check failed: {e}")
         
         return health
-    
+
+    def populate_teams(self) -> int:
+        """Populate the teams table with all 32 NFL teams."""
+        teams_data = [
+            # AFC East
+            ('BUF', 'Buffalo Bills', 'Buffalo', 'East', 'AFC'),
+            ('MIA', 'Miami Dolphins', 'Miami', 'East', 'AFC'),
+            ('NWE', 'New England Patriots', 'Foxborough', 'East', 'AFC'),
+            ('NYJ', 'New York Jets', 'East Rutherford', 'East', 'AFC'),
+            
+            # AFC North
+            ('BAL', 'Baltimore Ravens', 'Baltimore', 'North', 'AFC'),
+            ('CIN', 'Cincinnati Bengals', 'Cincinnati', 'North', 'AFC'),
+            ('CLE', 'Cleveland Browns', 'Cleveland', 'North', 'AFC'),
+            ('PIT', 'Pittsburgh Steelers', 'Pittsburgh', 'North', 'AFC'),
+            
+            # AFC South
+            ('HOU', 'Houston Texans', 'Houston', 'South', 'AFC'),
+            ('IND', 'Indianapolis Colts', 'Indianapolis', 'South', 'AFC'),
+            ('JAX', 'Jacksonville Jaguars', 'Jacksonville', 'South', 'AFC'),
+            ('TEN', 'Tennessee Titans', 'Nashville', 'South', 'AFC'),
+            
+            # AFC West
+            ('DEN', 'Denver Broncos', 'Denver', 'West', 'AFC'),
+            ('KAN', 'Kansas City Chiefs', 'Kansas City', 'West', 'AFC'),
+            ('LVR', 'Las Vegas Raiders', 'Las Vegas', 'West', 'AFC'),
+            ('LAC', 'Los Angeles Chargers', 'Inglewood', 'West', 'AFC'),
+            
+            # NFC East
+            ('DAL', 'Dallas Cowboys', 'Arlington', 'East', 'NFC'),
+            ('NYG', 'New York Giants', 'East Rutherford', 'East', 'NFC'),
+            ('PHI', 'Philadelphia Eagles', 'Philadelphia', 'East', 'NFC'),
+            ('WAS', 'Washington Commanders', 'Landover', 'East', 'NFC'),
+            
+            # NFC North
+            ('CHI', 'Chicago Bears', 'Chicago', 'North', 'NFC'),
+            ('DET', 'Detroit Lions', 'Detroit', 'North', 'NFC'),
+            ('GNB', 'Green Bay Packers', 'Green Bay', 'North', 'NFC'),
+            ('MIN', 'Minnesota Vikings', 'Minneapolis', 'North', 'NFC'),
+            
+            # NFC South
+            ('ATL', 'Atlanta Falcons', 'Atlanta', 'South', 'NFC'),
+            ('CAR', 'Carolina Panthers', 'Charlotte', 'South', 'NFC'),
+            ('NOR', 'New Orleans Saints', 'New Orleans', 'South', 'NFC'),
+            ('TAM', 'Tampa Bay Buccaneers', 'Tampa', 'South', 'NFC'),
+            
+            # NFC West
+            ('ARI', 'Arizona Cardinals', 'Glendale', 'West', 'NFC'),
+            ('LAR', 'Los Angeles Rams', 'Inglewood', 'West', 'NFC'),
+            ('SFO', 'San Francisco 49ers', 'Santa Clara', 'West', 'NFC'),
+            ('SEA', 'Seattle Seahawks', 'Seattle', 'West', 'NFC'),
+        ]
+        
+        insert_query = """
+        INSERT INTO teams (team_code, team_name, city, division, conference, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON CONFLICT (team_code) 
+        DO UPDATE SET
+            team_name = EXCLUDED.team_name,
+            city = EXCLUDED.city,
+            division = EXCLUDED.division,
+            conference = EXCLUDED.conference
+        """
+        
+        now = datetime.now()
+        values = [(team_code, team_name, city, division, conference, now) for team_code, team_name, city, division, conference in teams_data]
+        
+        try:
+            with self.get_connection() as conn:
+                with self.get_cursor(conn) as cur:
+                    from psycopg2.extras import execute_batch
+                    execute_batch(cur, insert_query, values, page_size=100)
+                    conn.commit()
+            return len(values)
+        except Exception as e:
+            self.logger.error(f"Error populating teams: {e}")
+            raise
+
+    def cleanup_team_codes(self) -> Dict[str, int]:
+        """Clean up duplicate team codes, prioritizing 3-letter codes."""
+        code_map = {
+            'NE': 'NWE',
+            'KC': 'KAN',
+            'LV': 'LVR',
+            'GB': 'GNB',
+            'NO': 'NOR',
+            'TB': 'TAM',
+            'SF': 'SFO',
+        }
+        
+        updated_rows = 0
+        deleted_teams = 0
+        
+        with self.get_connection() as conn:
+            with self.get_cursor(conn) as cur:
+                for old_code, new_code in code_map.items():
+                    try:
+                        # Update referencing table
+                        update_query = "UPDATE qb_passing_stats SET team = %s WHERE team = %s"
+                        cur.execute(update_query, (new_code, old_code))
+                        updated_rows += cur.rowcount
+                        
+                        # Delete old team record
+                        delete_query = "DELETE FROM teams WHERE team_code = %s"
+                        cur.execute(delete_query, (old_code,))
+                        deleted_teams += cur.rowcount
+                        
+                        self.logger.info(f"Migrated team code {old_code} to {new_code}")
+
+                    except Exception as e:
+                        self.logger.error(f"Error migrating {old_code} to {new_code}: {e}")
+                        conn.rollback()
+                        raise
+                
+                conn.commit()
+                
+        return {"updated_passing_stats_rows": updated_rows, "deleted_team_records": deleted_teams}
+
     def close(self) -> None:
         """Close database connections"""
         if self.pool:

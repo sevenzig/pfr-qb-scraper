@@ -8,7 +8,7 @@ import os
 import logging
 
 # Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from scrapers.enhanced_scraper import EnhancedPFRScraper
 from datetime import datetime
@@ -59,8 +59,8 @@ def test_real_player_splits():
             # Show some examples
             print("\nSample split records:")
             for i, split in enumerate(splits_data[:5]):
-                print(f"  {i+1}. {split.split_type}/{split.split_category}: "
-                      f"{split.completions}/{split.attempts} passes, {split.pass_yards} yards")
+                            print(f"  {i+1}. {split.split}/{split.value}: "
+                  f"{split.cmp}/{split.att} passes, {split.yds} yards")
         
         # Show metrics
         metrics = scraper.get_scraping_metrics()

@@ -1,0 +1,95 @@
+{
+  "validation_timestamp": "2025-07-09T17:47:31.888615",
+  "overall_summary": {
+    "total_datasets": 3,
+    "total_records": 30,
+    "total_issues": 9,
+    "average_quality_score": 85.0
+  },
+  "dataset_reports": {
+    "qb_stats": {
+      "validation_id": "mock_qb_stats_1752097651",
+      "timestamp": "2025-07-09T17:47:31.888486",
+      "total_records": 10,
+      "valid_records": 8,
+      "invalid_records": 2,
+      "total_issues": 3,
+      "issues_by_severity": {},
+      "issues_by_field": {},
+      "issues_by_type": {},
+      "data_quality_score": 80.0,
+      "validation_rules": [
+        "player_name_required",
+        "season_required",
+        "pfr_id_required",
+        "completion_pct_range",
+        "passer_rating_range",
+        "age_range",
+        "games_played_range",
+        "team_code_format",
+        "attempts_vs_completions",
+        "yards_per_attempt_consistency",
+        "touchdowns_vs_attempts",
+        "completion_percentage_calculation",
+        "yards_per_attempt_calculation"
+      ],
+      "summary": "Validation Report - 2025-07-09 17:47:31\nData Quality Score: 80.0/100\nRecords: 8/10 valid (80.0%)\nTotal Issues: 3\n"
+    },
+    "splits": {
+      "validation_id": "mock_splits_1752097651",
+      "timestamp": "2025-07-09T17:47:31.888518",
+      "total_records": 10,
+      "valid_records": 8,
+      "invalid_records": 2,
+      "total_issues": 3,
+      "issues_by_severity": {},
+      "issues_by_field": {},
+      "issues_by_type": {},
+      "data_quality_score": 80.0,
+      "validation_rules": [
+        "player_name_required",
+        "season_required",
+        "pfr_id_required",
+        "completion_pct_range",
+        "passer_rating_range",
+        "age_range",
+        "games_played_range",
+        "team_code_format",
+        "attempts_vs_completions",
+        "yards_per_attempt_consistency",
+        "touchdowns_vs_attempts",
+        "completion_percentage_calculation",
+        "yards_per_attempt_calculation"
+      ],
+      "summary": "Validation Report - 2025-07-09 17:47:31\nData Quality Score: 80.0/100\nRecords: 8/10 valid (80.0%)\nTotal Issues: 3\n"
+    },
+    "advanced_stats": {
+      "validation_id": "mock_advanced_stats_1752097651",
+      "timestamp": "2025-07-09T17:47:31.888528",
+      "total_records": 10,
+      "valid_records": 8,
+      "invalid_records": 2,
+      "total_issues": 3,
+      "issues_by_severity": {},
+      "issues_by_field": {},
+      "issues_by_type": {},
+      "data_quality_score": 80.0,
+      "validation_rules": [
+        "player_name_required",
+        "season_required",
+        "pfr_id_required",
+        "completion_pct_range",
+        "passer_rating_range",
+        "age_range",
+        "games_played_range",
+        "team_code_format",
+        "attempts_vs_completions",
+        "yards_per_attempt_consistency",
+        "touchdowns_vs_attempts",
+        "completion_percentage_calculation",
+        "yards_per_attempt_calculation"
+      ],
+      "summary": "Validation Report - 2025-07-09 17:47:31\nData Quality Score: 80.0/100\nRecords: 8/10 valid (80.0%)\nTotal Issues: 3\n"
+    }
+  }
+}

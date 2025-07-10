@@ -27,7 +27,7 @@ dev = [
 ]
 
 [project.scripts]
-nfl-qb-scraper = "main:main"
+nfl-qb-scraper = "src.cli.cli_main:main"
 
 [build-system]
 requires = ["hatchling"]

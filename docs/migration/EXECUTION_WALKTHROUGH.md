@@ -2,12 +2,15 @@
 
 ## Overview
 
-This guide walks you through the complete migration process from scattered scripts to unified CLI architecture using the prompt templates and framework we've created. Follow this step-by-step to ensure a successful migration.
+This guide walks you through the complete migration process from scattered
+scripts to unified CLI architecture using the prompt templates and framework
+we've created. Follow this step-by-step to ensure a successful migration.
 
 ## Pre-Migration Preparation
 
 ### 1. Environment Setup
-```bash
+
+````bash
 # Ensure you're in the project root
 cd /path/to/pfr-qb-scraper
 
@@ -19,9 +22,9 @@ git commit -m "Pre-migration backup: all current scripts and data"
 python -m venv venv
 source venv/bin/activate  # or venv\Scripts\activate on Windows
 pip install -r requirements.txt
-```
-
+```text
 ### 2. Baseline Documentation
+
 ```bash
 # Document current functionality
 ls scripts/ > docs/migration/current-scripts-inventory.txt
@@ -31,24 +34,24 @@ ls tests/ > docs/migration/current-tests-inventory.txt
 python scripts/enhanced_qb_scraper.py --help
 python scripts/robust_qb_scraper.py --help
 # (test each major script)
-```
-
+```text
 ### 3. Migration Branch Strategy
+
 ```bash
 # Create migration branch
 git checkout -b migration-phase1-foundation
 
 # Set up phase tracking
 echo "Phase 1: Foundation" > CURRENT_PHASE.md
-```
-
+```text
 ## Phase 1: Foundation (60% Test Coverage)
 
 ### Step 1: CLI Architecture Foundation
 
-**Copy and execute this prompt from `docs/migration/phase1-foundation-prompts.md`:**
+**Copy and execute this prompt from
+`docs/migration/phase1-foundation-prompts.md`:**
 
-```
+```text
 @.cursorrules @.cursor/rules/migration-guardrails.mdc @.cursor/rules/python-quality-standards.mdc
 
 ## Phase 1 Foundation - CLI Architecture Setup
@@ -56,7 +59,7 @@ echo "Phase 1: Foundation" > CURRENT_PHASE.md
 **Current Phase:** Foundation (60% test coverage minimum)
 **Objective:** Create CLI skeleton with command routing architecture
 
-**Requirements:**
+## Requirements:
 - Create `src/cli/` architecture with BaseCommand pattern
 - Implement ArgumentParser with subcommands
 - Create command registration system
@@ -64,14 +67,14 @@ echo "Phase 1: Foundation" > CURRENT_PHASE.md
 - Set up logging configuration
 - Ensure backwards compatibility (all existing scripts must still work)
 
-**Deliverables:**
+## Deliverables:
 - `src/cli/base_command.py` - BaseCommand abstract class
 - `src/cli/cli_main.py` - Main CLI entry point
 - `src/cli/commands/` - Command implementations directory
 - Basic command routing and help system
 - Integration with existing config system
 
-**Success Criteria:**
+## Success Criteria:
 - CLI skeleton runs without errors
 - Help system shows available commands
 - Basic error handling works
@@ -79,13 +82,12 @@ echo "Phase 1: Foundation" > CURRENT_PHASE.md
 - 60% test coverage achieved
 
 Please create the CLI architecture foundation following the established patterns.
-```
-
+```text
 ### Step 2: Configuration System
 
-**After CLI architecture is complete, use this prompt:**
+## After CLI architecture is complete, use this prompt:
 
-```
+```text
 @.cursorrules @.cursor/rules/migration-guardrails.mdc @.cursor/rules/python-quality-standards.mdc
 
 ## Phase 1 Foundation - Configuration System
@@ -93,7 +95,7 @@ Please create the CLI architecture foundation following the established patterns
 **Current Phase:** Foundation (building on CLI architecture)
 **Objective:** Centralize configuration management
 
-**Requirements:**
+## Requirements:
 - Enhance `src/config/settings.py` with centralized configuration
 - Environment variable handling with defaults
 - Configuration validation
@@ -103,27 +105,28 @@ Please create the CLI architecture foundation following the established patterns
 
 **Context:** CLI architecture is now in place, need configuration system that works with both new CLI and existing scripts.
 
-**Deliverables:**
+## Deliverables:
 - Enhanced configuration system
 - Environment variable management
 - Configuration validation
 - Documentation for configuration options
 
 Please implement the centralized configuration system.
-```
-
+```text
 ### Step 3: Phase 1 Validation
 
-**Use this validation prompt:**
+## Use this validation prompt:
 
-```
+````
+
 @.cursorrules @.cursor/rules/migration-guardrails.mdc
 
 ## Phase 1 Validation
 
 **Objective:** Validate Phase 1 deliverables before proceeding
 
-**Validation Checklist:**
+## Validation Checklist:
+
 - [ ] CLI skeleton runs: `python -m src.cli.cli_main --help`
 - [ ] Configuration system works with existing scripts
 - [ ] All existing scripts still functional
@@ -132,7 +135,8 @@ Please implement the centralized configuration system.
 - [ ] Test coverage ≥ 60%
 - [ ] No breaking changes to existing functionality
 
-**Test Commands:**
+## Test Commands:
+
 ```bash
 # Test CLI skeleton
 python -m src.cli.cli_main --help
@@ -146,7 +150,8 @@ python -m pytest tests/ -v --cov=src --cov-report=term-missing
 ```
 
 Please validate all Phase 1 deliverables and confirm readiness for Phase 2.
-```
+
+````
 
 ### Step 4: Phase 1 Commit
 
@@ -163,15 +168,15 @@ git commit -m "Phase 1 Foundation: CLI architecture and configuration system
 
 # Tag the phase
 git tag phase-1-foundation
-```
+````
 
 ## Phase 2: Core (70% Test Coverage)
 
 ### Step 1: Scraper Consolidation
 
-**Use this prompt from `docs/migration/phase2-core-prompts.md`:**
+## Use this prompt from `docs/migration/phase2-core-prompts.md`:
 
-```
+````text
 @.cursorrules @.cursor/rules/migration-guardrails.mdc @.cursor/rules/python-quality-standards.mdc
 
 ## Phase 2 Core - Scraper Consolidation
@@ -179,7 +184,7 @@ git tag phase-1-foundation
 **Current Phase:** Core (70% test coverage minimum)
 **Objective:** Consolidate scraper functionality into unified architecture
 
-**Requirements:**
+## Requirements:
 - Create `src/scrapers/unified_scraper.py` that combines functionality from:
   - `scripts/enhanced_qb_scraper.py`
   - `scripts/robust_qb_scraper.py`
@@ -192,7 +197,7 @@ git tag phase-1-foundation
 
 **Context:** Phase 1 foundation is complete with CLI architecture and configuration system in place.
 
-**Deliverables:**
+## Deliverables:
 - Unified scraper architecture
 - Consolidated scraping logic
 - Enhanced error handling
@@ -200,13 +205,12 @@ git tag phase-1-foundation
 - Backwards compatibility maintained
 
 Please consolidate the scraper functionality into the unified architecture.
-```
-
+```text
 ### Step 2: Core CLI Commands
 
-**After scraper consolidation, use this prompt:**
+## After scraper consolidation, use this prompt:
 
-```
+```text
 @.cursorrules @.cursor/rules/migration-guardrails.mdc @.cursor/rules/python-quality-standards.mdc
 
 ## Phase 2 Core - CLI Commands Implementation
@@ -214,7 +218,7 @@ Please consolidate the scraper functionality into the unified architecture.
 **Current Phase:** Core (building on scraper consolidation)
 **Objective:** Implement core CLI commands for primary scraping operations
 
-**Requirements:**
+## Requirements:
 - Implement these commands in `src/cli/commands/`:
   - `scrape.py` - Main scraping command
   - `validate.py` - Data validation command
@@ -228,7 +232,7 @@ Please consolidate the scraper functionality into the unified architecture.
 
 **Context:** Scrapers are now consolidated, need CLI commands that use the unified scraper architecture.
 
-**Deliverables:**
+## Deliverables:
 - Core CLI command implementations
 - Consistent command interface
 - Help system integration
@@ -236,13 +240,12 @@ Please consolidate the scraper functionality into the unified architecture.
 - Error handling
 
 Please implement the core CLI commands using the unified scraper architecture.
-```
-
+```text
 ### Step 3: Legacy Script Migration
 
-**Use this comprehensive prompt:**
+## Use this comprehensive prompt:
 
-```
+```text
 @.cursorrules @.cursor/rules/migration-guardrails.mdc @.cursor/rules/script-migration-patterns.mdc
 
 ## Phase 2 Core - Legacy Script Migration
@@ -250,14 +253,14 @@ Please implement the core CLI commands using the unified scraper architecture.
 **Current Phase:** Core (migrating specific legacy scripts)
 **Objective:** Migrate specific legacy scripts to CLI commands
 
-**Priority Scripts to Migrate:**
+## Priority Scripts to Migrate:
 1. `scripts/enhanced_qb_scraper.py` → `qb-scraper scrape --enhanced`
 2. `scripts/robust_qb_scraper.py` → `qb-scraper scrape --robust`
 3. `scripts/scrape_qb_data_2024.py` → `qb-scraper scrape --season 2024`
 4. `scripts/populate_teams.py` → `qb-scraper setup --teams`
 5. `scripts/clear_qb_data.py` → `qb-scraper data --clear`
 
-**Requirements:**
+## Requirements:
 - Create CLI command equivalents for each script
 - Maintain exact same functionality
 - Preserve all command-line arguments
@@ -267,27 +270,28 @@ Please implement the core CLI commands using the unified scraper architecture.
 
 **Context:** Core CLI commands are implemented, now need to migrate specific legacy scripts.
 
-**Deliverables:**
+## Deliverables:
 - CLI command equivalents for priority scripts
 - Migration mapping documentation
 - Deprecation warnings in legacy scripts
 - Equivalence testing
 
 Please migrate the priority legacy scripts to CLI commands.
-```
-
+```text
 ### Step 4: Phase 2 Validation
 
-**Use this validation prompt:**
+## Use this validation prompt:
 
-```
+````
+
 @.cursorrules @.cursor/rules/migration-guardrails.mdc
 
 ## Phase 2 Validation
 
 **Objective:** Validate Phase 2 deliverables before proceeding
 
-**Validation Checklist:**
+## Validation Checklist:
+
 - [ ] Unified scraper architecture works
 - [ ] Core CLI commands implemented and functional
 - [ ] Legacy scripts migrated to CLI equivalents
@@ -297,7 +301,8 @@ Please migrate the priority legacy scripts to CLI commands.
 - [ ] Error handling improved
 - [ ] Documentation updated
 
-**Test Commands:**
+## Test Commands:
+
 ```bash
 # Test unified scraper
 python -m src.cli.cli_main scrape --help
@@ -310,14 +315,16 @@ python -m src.cli.cli_main scrape --enhanced --season 2024 --player "Joe Burrow"
 python -m pytest tests/ -v --cov=src --cov-report=term-missing
 ```
 
-**Equivalence Testing:**
+## Equivalence Testing:
+
 - Compare outputs between old and new commands
 - Verify data integrity
 - Check performance metrics
 - Validate error handling
 
 Please validate all Phase 2 deliverables and confirm readiness for Phase 3.
-```
+
+````
 
 ### Step 5: Phase 2 Commit
 
@@ -333,15 +340,15 @@ git commit -m "Phase 2 Core: Scraper consolidation and CLI commands
 - Achieved 70% test coverage"
 
 git tag phase-2-core
-```
+````
 
 ## Phase 3: Advanced (80% Test Coverage)
 
 ### Step 1: Data Management System
 
-**Use this prompt from `docs/migration/phase3-advanced-prompts.md`:**
+## Use this prompt from `docs/migration/phase3-advanced-prompts.md`:
 
-```
+````text
 @.cursorrules @.cursor/rules/migration-guardrails.mdc @.cursor/rules/python-quality-standards.mdc
 
 ## Phase 3 Advanced - Data Management System
@@ -349,7 +356,7 @@ git tag phase-2-core
 **Current Phase:** Advanced (80% test coverage minimum)
 **Objective:** Implement comprehensive data management capabilities
 
-**Requirements:**
+## Requirements:
 - Create `src/operations/data_manager.py` for data operations
 - Implement data validation and integrity checking
 - Add data export/import capabilities
@@ -360,7 +367,7 @@ git tag phase-2-core
 
 **Context:** Core scraping and CLI commands are working, now need robust data management.
 
-**Deliverables:**
+## Deliverables:
 - Data management system
 - Validation and integrity checking
 - Export/import capabilities
@@ -368,13 +375,12 @@ git tag phase-2-core
 - Performance optimization
 
 Please implement the comprehensive data management system.
-```
-
+```text
 ### Step 2: Multi-Team Handling
 
-**After data management is complete:**
+## After data management is complete:
 
-```
+```text
 @.cursorrules @.cursor/rules/migration-guardrails.mdc @.cursor/rules/python-quality-standards.mdc
 
 ## Phase 3 Advanced - Multi-Team Handling
@@ -382,7 +388,7 @@ Please implement the comprehensive data management system.
 **Current Phase:** Advanced (building on data management)
 **Objective:** Implement sophisticated multi-team and multi-season capabilities
 
-**Requirements:**
+## Requirements:
 - Enhanced team management system
 - Multi-season data handling
 - Player career tracking across teams
@@ -392,27 +398,28 @@ Please implement the comprehensive data management system.
 
 **Context:** Data management system is in place, need to handle complex multi-team scenarios.
 
-**Deliverables:**
+## Deliverables:
 - Multi-team handling system
 - Cross-season tracking
 - Player career management
 - Historical data capabilities
 
 Please implement the multi-team handling system.
-```
-
+```text
 ### Step 3: Phase 3 Validation
 
-**Validate advanced features:**
+## Validate advanced features:
 
-```
+````
+
 @.cursorrules @.cursor/rules/migration-guardrails.mdc
 
 ## Phase 3 Validation
 
 **Objective:** Validate Phase 3 advanced features
 
-**Validation Checklist:**
+## Validation Checklist:
+
 - [ ] Data management system functional
 - [ ] Multi-team handling works correctly
 - [ ] Data validation and integrity checking
@@ -421,7 +428,8 @@ Please implement the multi-team handling system.
 - [ ] Test coverage ≥ 80%
 - [ ] Complex scenarios handled properly
 
-**Test Commands:**
+## Test Commands:
+
 ```bash
 # Test data management
 python -m src.cli.cli_main data --validate
@@ -435,7 +443,8 @@ python -m src.cli.cli_main data --benchmark
 ```
 
 Please validate all Phase 3 deliverables and confirm readiness for Phase 4.
-```
+
+````
 
 ### Step 4: Phase 3 Commit
 
@@ -450,15 +459,15 @@ git commit -m "Phase 3 Advanced: Data management and multi-team handling
 - Achieved 80% test coverage"
 
 git tag phase-3-advanced
-```
+````
 
 ## Phase 4: Production (85% Test Coverage)
 
 ### Step 1: Quality Gates
 
-**Use this prompt from `docs/migration/phase4-production-prompts.md`:**
+## Use this prompt from `docs/migration/phase4-production-prompts.md`:
 
-```
+````text
 @.cursorrules @.cursor/rules/migration-guardrails.mdc @.cursor/rules/python-quality-standards.mdc
 
 ## Phase 4 Production - Quality Gates
@@ -466,7 +475,7 @@ git tag phase-3-advanced
 **Current Phase:** Production (85% test coverage minimum)
 **Objective:** Implement production-ready quality gates and monitoring
 
-**Requirements:**
+## Requirements:
 - Comprehensive test suite with 85% coverage
 - Performance benchmarking and monitoring
 - Error tracking and reporting
@@ -476,7 +485,7 @@ git tag phase-3-advanced
 
 **Context:** All core functionality is complete, need production-ready quality assurance.
 
-**Deliverables:**
+## Deliverables:
 - Production-ready test suite
 - Performance monitoring
 - Error tracking system
@@ -484,13 +493,12 @@ git tag phase-3-advanced
 - Deployment preparation
 
 Please implement the production quality gates.
-```
-
+```text
 ### Step 2: Legacy Deprecation
 
-**After quality gates are in place:**
+## After quality gates are in place:
 
-```
+```text
 @.cursorrules @.cursor/rules/migration-guardrails.mdc @.cursor/rules/deprecation-patterns.mdc
 
 ## Phase 4 Production - Legacy Deprecation
@@ -498,7 +506,7 @@ Please implement the production quality gates.
 **Current Phase:** Production (final legacy deprecation)
 **Objective:** Safely deprecate legacy scripts and complete migration
 
-**Requirements:**
+## Requirements:
 - Add deprecation warnings to all legacy scripts
 - Create migration guide for users
 - Implement legacy script redirects to CLI commands
@@ -508,27 +516,28 @@ Please implement the production quality gates.
 
 **Context:** All functionality is now available in CLI, safe to deprecate legacy scripts.
 
-**Deliverables:**
+## Deliverables:
 - Deprecation warnings and redirects
 - User migration guide
 - Legacy removal timeline
 - Communication strategy
 
 Please implement the legacy deprecation strategy.
-```
-
+```text
 ### Step 3: Final Validation
 
-**Comprehensive final validation:**
+## Comprehensive final validation:
 
-```
+````
+
 @.cursorrules @.cursor/rules/migration-guardrails.mdc
 
 ## Phase 4 Final Validation
 
 **Objective:** Final validation against all migration success criteria
 
-**Success Criteria Validation:**
+## Success Criteria Validation:
+
 - [ ] Single entry point: `qb-scraper` command works
 - [ ] All 16 commands implemented and functional
 - [ ] Test coverage ≥ 85%
@@ -540,7 +549,8 @@ Please implement the legacy deprecation strategy.
 - [ ] User migration path clear
 - [ ] Legacy deprecation strategy implemented
 
-**Final Test Suite:**
+## Final Test Suite:
+
 ```bash
 # Comprehensive testing
 python -m pytest tests/ -v --cov=src --cov-report=html
@@ -557,7 +567,8 @@ python -m src.cli.cli_main setup --check
 ```
 
 Please conduct final validation and confirm production readiness.
-```
+
+````
 
 ### Step 4: Production Deployment
 
@@ -578,43 +589,43 @@ git tag phase-4-production
 git checkout main
 git merge migration-phase1-foundation
 git push origin main --tags
-```
+````
 
 ## Troubleshooting Guide
 
 ### Common Issues and Solutions
 
 #### 1. Test Coverage Below Target
-```bash
+
+````bash
 # Check coverage details
 python -m pytest tests/ --cov=src --cov-report=term-missing
 # Add tests for uncovered lines
-```
-
+```text
 #### 2. Performance Regression
+
 ```bash
 # Run benchmarks
 python -m src.cli.cli_main benchmark --baseline
 # Profile slow operations
 python -m cProfile -s cumulative src/cli/cli_main.py scrape --season 2024
-```
-
+```text
 #### 3. Migration Validation Failures
+
 ```bash
 # Compare outputs
 python scripts/enhanced_qb_scraper.py --season 2024 > old_output.txt
 python -m src.cli.cli_main scrape --enhanced --season 2024 > new_output.txt
 diff old_output.txt new_output.txt
-```
-
+```text
 #### 4. Database Connection Issues
+
 ```bash
 # Test database connectivity
 python -m src.cli.cli_main setup --test-db
 # Check configuration
 python -m src.cli.cli_main config --validate
-```
-
+```text
 ## Success Metrics Tracking
 
 ### Key Performance Indicators
@@ -633,8 +644,7 @@ grep -c "ERROR" logs/cli.log
 
 # User adoption
 git log --oneline --since="1 month ago" | wc -l
-```
-
+```text
 ### Migration Milestones
 
 - **Phase 1 Complete**: CLI architecture functional, 60% coverage
@@ -645,28 +655,33 @@ git log --oneline --since="1 month ago" | wc -l
 ## Best Practices for Using This Walkthrough
 
 ### 1. Follow the Sequence
+
 - Complete each phase fully before moving to the next
 - Don't skip validation steps
 - Commit after each phase completion
 
 ### 2. Use the Prompts as Written
+
 - Copy prompts exactly from the template files
 - Include all context references (@.cursorrules, etc.)
 - Modify only the specific requirements if needed
 
 ### 3. Validate Thoroughly
+
 - Test both old and new functionality
 - Check performance metrics
 - Verify data integrity
 - Ensure backwards compatibility
 
 ### 4. Document Everything
+
 - Keep migration notes
 - Document any issues encountered
 - Update documentation as you go
 - Track metrics and performance
 
 ### 5. Maintain Quality Standards
+
 - Don't compromise on test coverage
 - Follow coding standards strictly
 - Implement proper error handling
@@ -697,4 +712,7 @@ git log --oneline --since="1 month ago" | wc -l
 - **Test Coverage**: `python -m pytest tests/ --cov=src --cov-report=html`
 - **Performance Monitoring**: `python -m src.cli.cli_main benchmark`
 
-This walkthrough provides a complete path from your current scattered scripts to a production-ready CLI tool. Follow each step carefully, validate thoroughly, and maintain the quality standards throughout the migration process. 
+This walkthrough provides a complete path from your current scattered scripts to
+a production-ready CLI tool. Follow each step carefully, validate thoroughly,
+and maintain the quality standards throughout the migration process.
+````

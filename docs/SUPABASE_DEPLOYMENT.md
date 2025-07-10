@@ -1,6 +1,7 @@
 # Supabase Schema Deployment Guide
 
-This guide will help you deploy the NFL QB data schema to your Supabase instance.
+This guide will help you deploy the NFL QB data schema to your Supabase
+instance.
 
 ## Prerequisites
 
@@ -12,14 +13,13 @@ This guide will help you deploy the NFL QB data schema to your Supabase instance
 
 First, make sure you have the required Python packages:
 
-```bash
+````bash
 # Install psycopg2 for PostgreSQL connection
 pip install psycopg2-binary
 
 # Or if using uv
 uv add psycopg2-binary
-```
-
+```text
 ## Step 2: Set Up Environment Variables
 
 ### Option A: Interactive Setup (Recommended)
@@ -28,9 +28,9 @@ Run the interactive setup script:
 
 ```bash
 python scripts/setup_supabase_env.py
-```
-
+```text
 This will:
+
 - Guide you through entering your Supabase credentials
 - Create a `.env` file with all necessary configuration
 - Test the database connection
@@ -66,14 +66,15 @@ DB_STATEMENT_TIMEOUT=300
 # Logging Configuration
 LOG_LEVEL=INFO
 LOG_TO_FILE=true
-```
-
+```text
 ## Step 3: Get Your Supabase Credentials
 
-1. **Go to Supabase**: Visit [https://supabase.com](https://supabase.com) and sign in
+1. **Go to Supabase**: Visit [https://supabase.com](https://supabase.com) and
+   sign in
 2. **Select Your Project**: Choose your project (or create a new one)
 3. **Database Settings**: Go to Settings > Database
-4. **Copy Connection String**: Copy the connection string from the "Connection string" section
+4. **Copy Connection String**: Copy the connection string from the "Connection
+   string" section
 5. **Copy API Keys**: Copy the URL and anon key from the "API" section
 
 ## Step 4: Deploy the Schema
@@ -89,8 +90,7 @@ python scripts/deploy_schema_to_supabase.py --force
 
 # Test connection only
 python scripts/deploy_schema_to_supabase.py --test-only
-```
-
+```text
 ### Option B: Manual Deployment
 
 If you prefer to deploy manually, you can use the Supabase SQL editor:
@@ -106,8 +106,7 @@ If you prefer to deploy manually, you can use the Supabase SQL editor:
 ```bash
 # Deploy using psql (replace with your connection string)
 psql "postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres" -f sql/schema.sql
-```
-
+```text
 ## Step 5: Verify the Deployment
 
 After deployment, verify that everything was created correctly:
@@ -115,18 +114,17 @@ After deployment, verify that everything was created correctly:
 ```bash
 # Test the deployment
 python scripts/deploy_schema_to_supabase.py --test-only
-```
-
+```text
 You should see output like:
-```
+
+```text
 ✅ Connected to PostgreSQL: PostgreSQL 15.1 on x86_64-pc-linux-gnu
 ✅ Connected to database: postgres
 ✅ Created tables: players, qb_advanced_stats, qb_basic_stats, qb_game_log, qb_splits, scraping_log, teams
 ✅ Created 25 indexes
 ✅ Created 5 views: database_stats, qb_home_away_splits, qb_quarter_performance, qb_red_zone_performance, qb_season_summary, qb_vs_winning_teams
 ✅ Created 2 functions: get_qb_splits_by_type, get_qb_stats_by_season
-```
-
+```text
 ## Step 6: Test with Sample Data
 
 Once the schema is deployed, you can test it with sample data:
@@ -134,8 +132,7 @@ Once the schema is deployed, you can test it with sample data:
 ```bash
 # Test scraping Joe Burrow's data
 python scripts/scrape_joe_burrow.py
-```
-
+```text
 ## Troubleshooting
 
 ### Connection Issues
@@ -158,15 +155,18 @@ If schema deployment fails:
 
 ### Common Error Messages
 
-**"permission denied"**
+## "permission denied"
+
 - Your database user doesn't have sufficient privileges
 - Contact Supabase support or check your project settings
 
-**"relation already exists"**
+## "relation already exists"
+
 - Tables already exist in your database
 - Use `--force` flag to recreate them
 
-**"connection timeout"**
+## "connection timeout"
+
 - Network connectivity issues
 - Check your internet connection and firewall settings
 
@@ -175,6 +175,7 @@ If schema deployment fails:
 The deployed schema includes:
 
 ### Core Tables
+
 - `players`: Player master data and biographical information
 - `teams`: NFL team information
 - `qb_basic_stats`: Basic quarterback statistics by season
@@ -184,6 +185,7 @@ The deployed schema includes:
 - `scraping_log`: Scraping session logs and monitoring
 
 ### Views
+
 - `qb_season_summary`: Combined basic and advanced stats
 - `qb_home_away_splits`: Home vs away performance
 - `qb_quarter_performance`: Performance by game quarter
@@ -192,10 +194,12 @@ The deployed schema includes:
 - `database_stats`: Database statistics and metadata
 
 ### Functions
+
 - `get_qb_stats_by_season(season)`: Get QB stats for a specific season
 - `get_qb_splits_by_type(pfr_id, season, split_type)`: Get QB splits by type
 
 ### Features
+
 - **Row Level Security (RLS)**: Enabled on all tables for Supabase
 - **Constraints**: Data integrity constraints for statistical validity
 - **Indexes**: Optimized indexes for common query patterns
@@ -225,4 +229,5 @@ If you encounter issues:
 - Never commit your `.env` file to version control
 - Use environment variables for sensitive credentials
 - The schema includes RLS policies for security
-- Consider setting up proper authentication for production use 
+- Consider setting up proper authentication for production use
+````

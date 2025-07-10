@@ -7,10 +7,11 @@ Extracts data matching CSV structures exactly - NO CALCULATIONS
 import time
 import requests
 import pandas as pd
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
+from bs4.element import NavigableString
 import logging
 from urllib.parse import urljoin, urlparse
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Union
 from datetime import datetime
 import random
 import re
@@ -74,24 +75,27 @@ class RawDataScraper:
         
         # Find the main passing table
         table = soup.find('table', {'id': 'passing'})
-        if not table:
+        if not table or not isinstance(table, Tag):
             logger.error("Could not find passing table")
             return []
         
         passing_stats = []
         tbody = table.find('tbody')
-        if not tbody:
+        if not tbody or not isinstance(tbody, Tag):
             logger.error("Could not find table body")
             return []
         
         for row in tbody.find_all('tr'):
+            if not isinstance(row, Tag):
+                continue
             # Skip header rows
-            if 'thead' in row.get('class', []):
+            class_attr = row.get('class')
+            if class_attr and 'thead' in class_attr:
                 continue
             
             # Extract position and filter for QBs only
             pos_cell = row.find('td', {'data-stat': 'pos'})
-            if not pos_cell:
+            if not pos_cell or not isinstance(pos_cell, Tag):
                 continue
             
             position = pos_cell.get_text(strip=True).upper()
@@ -101,16 +105,16 @@ class RawDataScraper:
             try:
                 # Extract player info
                 name_cell = row.find('td', {'data-stat': 'name_display'})
-                if not name_cell:
+                if not name_cell or not isinstance(name_cell, Tag):
                     continue
                 
                 name_link = name_cell.find('a')
-                if not name_link:
+                if not name_link or not isinstance(name_link, Tag):
                     continue
                 
                 player_name = name_link.get_text(strip=True)
                 href = name_link.get('href', '')
-                player_url = self.base_url + href if href else ''
+                player_url = self.base_url + str(href) if href else ''
                 
                 # Extract PFR ID from URL
                 pfr_id = self._extract_pfr_id_from_url(player_url)
@@ -140,7 +144,7 @@ class RawDataScraper:
         logger.info(f"Extracted {len(passing_stats)} QB passing stats")
         return passing_stats
     
-    def _extract_passing_stats_from_row(self, row) -> Dict[str, Any]:
+    def _extract_passing_stats_from_row(self, row: Tag) -> Dict[str, Any]:
         """Extract all passing stats from a row matching CSV structure exactly"""
         stats = {}
         
@@ -184,7 +188,7 @@ class RawDataScraper:
         # Extract each stat
         for data_stat, csv_col in stat_mapping.items():
             cell = row.find('td', {'data-stat': data_stat})
-            if cell:
+            if cell and isinstance(cell, Tag):
                 value = cell.get_text(strip=True)
                 
                 # Convert to appropriate type based on CSV column
@@ -258,17 +262,20 @@ class RawDataScraper:
         
         # Find the main splits table (usually 'splits')
         table = soup.find('table', {'id': 'splits'})
-        if not table:
+        if not table or not isinstance(table, Tag):
             logger.warning(f"Could not find splits table for {player_name}")
             return splits
         
         tbody = table.find('tbody')
-        if not tbody:
+        if not tbody or not isinstance(tbody, Tag):
             return splits
         
         for row in tbody.find_all('tr'):
+            if not isinstance(row, Tag):
+                continue
             # Skip header rows
-            if 'thead' in row.get('class', []):
+            class_attr = row.get('class')
+            if class_attr and 'thead' in class_attr:
                 continue
             
             try:
@@ -304,17 +311,20 @@ class RawDataScraper:
         
         # Find the advanced splits table (usually 'advanced_splits')
         table = soup.find('table', {'id': 'advanced_splits'})
-        if not table:
+        if not table or not isinstance(table, Tag):
             logger.warning(f"Could not find advanced splits table for {player_name}")
             return splits
         
         tbody = table.find('tbody')
-        if not tbody:
+        if not tbody or not isinstance(tbody, Tag):
             return splits
         
         for row in tbody.find_all('tr'):
+            if not isinstance(row, Tag):
+                continue
             # Skip header rows
-            if 'thead' in row.get('class', []):
+            class_attr = row.get('class')
+            if class_attr and 'thead' in class_attr:
                 continue
             
             try:
@@ -344,13 +354,14 @@ class RawDataScraper:
         
         return splits
     
-    def _extract_split_info(self, row) -> Optional[Dict[str, str]]:
+    def _extract_split_info(self, row: Tag) -> Optional[Dict[str, str]]:
         """Extract split type and value from a row"""
         # Try different approaches to get split info
         split_id_cell = row.find('td', {'data-stat': 'split_id'})
         split_value_cell = row.find('td', {'data-stat': 'split_value'})
         
-        if split_id_cell and split_value_cell:
+        if (split_id_cell and isinstance(split_id_cell, Tag) and 
+            split_value_cell and isinstance(split_value_cell, Tag)):
             return {
                 'split': split_id_cell.get_text(strip=True),
                 'value': split_value_cell.get_text(strip=True)
@@ -359,14 +370,16 @@ class RawDataScraper:
         # Alternative approach - look for first two cells
         cells = row.find_all('td')
         if len(cells) >= 2:
-            return {
-                'split': cells[0].get_text(strip=True),
-                'value': cells[1].get_text(strip=True)
-            }
+            cell1, cell2 = cells[0], cells[1]
+            if isinstance(cell1, Tag) and isinstance(cell2, Tag):
+                return {
+                    'split': cell1.get_text(strip=True),
+                    'value': cell2.get_text(strip=True)
+                }
         
         return None
     
-    def _extract_splits_type1_from_row(self, row) -> Dict[str, Any]:
+    def _extract_splits_type1_from_row(self, row: Tag) -> Dict[str, Any]:
         """Extract splits type 1 stats matching advanced_stats_1.csv exactly"""
         stats = {}
         
@@ -374,8 +387,14 @@ class RawDataScraper:
         stat_mapping = {
             'g': 'g',
             'wins': 'w',
+            'win': 'w',  # fallback
+            'w': 'w',    # fallback
             'losses': 'l',
+            'loss': 'l', # fallback
+            'l': 'l',    # fallback
             'ties': 't',
+            'tie': 't',  # fallback
+            't': 't',    # fallback
             'pass_cmp': 'cmp',
             'pass_att': 'att',
             'pass_inc': 'inc',
@@ -409,7 +428,7 @@ class RawDataScraper:
         # Extract each stat
         for data_stat, csv_col in stat_mapping.items():
             cell = row.find('td', {'data-stat': data_stat})
-            if cell:
+            if cell and isinstance(cell, Tag):
                 value = cell.get_text(strip=True)
                 
                 # Convert to appropriate type
@@ -419,10 +438,12 @@ class RawDataScraper:
                     stats[csv_col] = safe_float(value) if value else None
                 else:
                     stats[csv_col] = value if value else None
-        
+        # Debug log for wins, losses, ties
+        import logging
+        logging.debug(f"Extracted splits row: w={stats.get('w')}, l={stats.get('l')}, t={stats.get('t')}, all={stats}")
         return stats
     
-    def _extract_splits_type2_from_row(self, row) -> Dict[str, Any]:
+    def _extract_splits_type2_from_row(self, row: Tag) -> Dict[str, Any]:
         """Extract splits type 2 stats matching advanced_stats.2.csv exactly"""
         stats = {}
         
@@ -451,7 +472,7 @@ class RawDataScraper:
         # Extract each stat
         for data_stat, csv_col in stat_mapping.items():
             cell = row.find('td', {'data-stat': data_stat})
-            if cell:
+            if cell and isinstance(cell, Tag):
                 value = cell.get_text(strip=True)
                 
                 # Convert to appropriate type

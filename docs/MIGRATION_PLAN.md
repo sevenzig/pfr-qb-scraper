@@ -1,32 +1,39 @@
 # NFL QB Scraper Migration Plan
+
 ## From Script Sprawl to Modular CLI Architecture
 
 ### Current State Analysis
 
 #### Existing Scripts Audit
-**Core Scrapers (3 different approaches - CONSOLIDATE)**
+
+## Core Scrapers (3 different approaches - CONSOLIDATE)
+
 - `scripts/enhanced_qb_scraper.py` - Main production scraper
-- `scripts/scrape_qb_data_2024.py` - Alternative scraper  
+- `scripts/scrape_qb_data_2024.py` - Alternative scraper
 - `scripts/robust_qb_scraper.py` - Another alternative
 - `src/scrapers/enhanced_scraper.py` - Library version
 - `src/scrapers/nfl_qb_scraper.py` - Base scraper
 - `src/scrapers/raw_data_scraper.py` - Raw data focus
 
-**Setup/Maintenance Scripts (ORGANIZE INTO SETUP MODULE)**
+## Setup/Maintenance Scripts (ORGANIZE INTO SETUP MODULE)
+
 - `scripts/populate_teams.py` - Team data setup
 - `scripts/add_multi_team_codes.py` - Multi-team support
 - `scripts/modify_teams_schema_for_multi_team.py` - Schema updates
 - `setup/deploy_schema_to_supabase.py` - Schema deployment
 
-**Data Management Scripts (CONSOLIDATE INTO DATA MODULE)**
+## Data Management Scripts (CONSOLIDATE INTO DATA MODULE)
+
 - `scripts/clear_qb_data.py` - Data cleanup
 - `scripts/update_qb_stats_team_codes.py` - Data fixes
 - `scripts/update_teams_to_pfr_codes.py` - Code updates
 
-**Debug Scripts (MOVE TO DEBUG MODULE)**
+## Debug Scripts (MOVE TO DEBUG MODULE)
+
 - `debug/` directory with 8+ scripts - Various debugging tools
 
 #### Problems Identified
+
 1. **No single entry point** - Users don't know which script to run
 2. **Duplicate functionality** - 3+ scrapers doing similar things
 3. **Scattered setup** - Setup operations spread across multiple scripts
@@ -39,6 +46,7 @@
 ## Migration Strategy Overview
 
 ### Phase 1: Foundation (Week 1)
+
 **Goal**: Create new CLI structure without breaking existing functionality
 
 1. **Create CLI Foundation**
@@ -52,6 +60,7 @@
    - `src/cli/commands/` - CLI command handlers
 
 ### Phase 2: Core Migration (Week 2)
+
 **Goal**: Migrate and consolidate core scraping functionality
 
 1. **Consolidate Scrapers**
@@ -65,6 +74,7 @@
    - Team data initialization
 
 ### Phase 3: Data Management (Week 3)
+
 **Goal**: Unified data operations and validation
 
 1. **Data Operations**
@@ -78,6 +88,7 @@
    - Test data fixtures
 
 ### Phase 4: Polish & Deprecation (Week 4)
+
 **Goal**: Production-ready CLI and deprecate old scripts
 
 1. **Production Features**
@@ -94,7 +105,7 @@
 
 ## New Project Structure
 
-```
+````text
 pfr-qb-scraper/
 ├── src/
 │   ├── cli/
@@ -161,13 +172,13 @@ pfr-qb-scraper/
     ├── CLI_USAGE.md                  # New CLI documentation
     ├── MIGRATION_GUIDE.md            # User migration guide
     └── DEVELOPMENT.md                # Development guidelines
-```
-
+```text
 ---
 
 ## Command Structure Design
 
 ### `python -m pfr_scraper scrape`
+
 ```bash
 # Full season scraping
 python -m pfr_scraper scrape season 2024 --profile full
@@ -180,9 +191,9 @@ python -m pfr_scraper scrape splits --season 2024 --split-types basic,advanced
 
 # Resume failed scraping
 python -m pfr_scraper scrape resume --session-id abc123
-```
-
+```text
 ### `python -m pfr_scraper setup`
+
 ```bash
 # Full setup
 python -m pfr_scraper setup all
@@ -195,9 +206,9 @@ python -m pfr_scraper setup teams --include-multi-team
 
 # Check setup status
 python -m pfr_scraper setup status
-```
-
+```text
 ### `python -m pfr_scraper data`
+
 ```bash
 # Clear data
 python -m pfr_scraper data clear --season 2024 --confirm
@@ -210,9 +221,9 @@ python -m pfr_scraper data aggregate --season 2024 --prefer-combined
 
 # Export data
 python -m pfr_scraper data export --format csv --season 2024
-```
-
+```text
 ### `python -m pfr_scraper debug`
+
 ```bash
 # Test connection
 python -m pfr_scraper debug connection
@@ -222,37 +233,41 @@ python -m pfr_scraper debug player "Joe Burrow" --season 2024
 
 # Check field mappings
 python -m pfr_scraper debug fields --url "https://pro-football-reference.com/..."
-```
-
+```text
 ---
 
 ## Migration Implementation Steps
 
 ### Step 1: CLI Foundation Setup
+
 1. Create `src/cli/main.py` with argument parsing
 2. Implement basic command routing
 3. Add help system and version info
 4. Create command base classes
 
 ### Step 2: Core Module Migration
+
 1. Create `CoreScraper` class combining best features from existing scrapers
 2. Migrate configuration management to `src/config/`
 3. Standardize logging across all modules
 4. Create unified error handling
 
 ### Step 3: Operations Layer
+
 1. Migrate setup scripts to `SetupOperations` class
 2. Migrate data management to `DataOperations` class
 3. Create `ScrapingOperations` for high-level workflows
 4. Add progress tracking and session management
 
 ### Step 4: Testing & Quality Assurance
+
 1. Create test fixtures from existing debug scripts
 2. Implement unit tests for core modules
 3. Create integration tests for CLI commands
 4. Performance testing and optimization
 
 ### Step 5: Documentation & Migration
+
 1. Create comprehensive CLI documentation
 2. Write user migration guide
 3. Update README with new usage patterns
@@ -263,16 +278,19 @@ python -m pfr_scraper debug fields --url "https://pro-football-reference.com/...
 ## Backwards Compatibility Strategy
 
 ### Transition Period (Phases 1-3)
+
 - **Keep old scripts functional** - Don't break existing workflows
 - **Add deprecation warnings** - Warn users about upcoming changes
 - **Provide migration commands** - Help users transition
 
 ### Deprecation Phase (Phase 4)
+
 - **Move scripts to `legacy/`** - Still available but clearly deprecated
 - **Update all documentation** - Point to new CLI
 - **Provide wrapper scripts** - For critical legacy workflows
 
 ### Post-Migration
+
 - **Remove legacy code** - After 1-2 months of stable new CLI
 - **Archive old documentation** - Keep for reference
 
@@ -281,18 +299,21 @@ python -m pfr_scraper debug fields --url "https://pro-football-reference.com/...
 ## Success Metrics
 
 ### Quality Improvements
+
 - [ ] **Single entry point** - One command to rule them all
-- [ ] **90% test coverage** - Core modules fully tested  
+- [ ] **90% test coverage** - Core modules fully tested
 - [ ] **Consistent error handling** - Standardized across all operations
 - [ ] **Comprehensive logging** - Clear operational visibility
 
 ### User Experience
+
 - [ ] **5-minute setup** - New users can get started quickly
 - [ ] **Self-documenting** - Built-in help and examples
 - [ ] **Robust error recovery** - Graceful handling of failures
 - [ ] **Progress tracking** - Users know what's happening
 
-### Developer Experience  
+### Developer Experience
+
 - [ ] **Modular architecture** - Easy to extend and modify
 - [ ] **Type safety** - Full type hints throughout
 - [ ] **Automated testing** - CI/CD pipeline with tests
@@ -303,16 +324,20 @@ python -m pfr_scraper debug fields --url "https://pro-football-reference.com/...
 ## Risk Mitigation
 
 ### Technical Risks
+
 - **Data loss during migration** → Backup database before major changes
 - **Performance regression** → Benchmark before/after migration
 - **Integration failures** → Comprehensive integration testing
 
 ### User Adoption Risks
+
 - **Learning curve** → Comprehensive documentation and examples
 - **Workflow disruption** → Maintain backwards compatibility during transition
 - **Feature gaps** → Audit current functionality thoroughly
 
 ### Timeline Risks
+
 - **Scope creep** → Strict phase boundaries and deliverables
 - **Technical debt** → Address incrementally, don't boil the ocean
-- **Resource constraints** → Focus on core functionality first 
+- **Resource constraints** → Focus on core functionality first
+````

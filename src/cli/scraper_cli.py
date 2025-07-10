@@ -2,6 +2,9 @@
 """
 Command-line interface for NFL QB Data Scraping System
 Provides various commands for scraping, monitoring, and data management
+
+NOTE: This is the legacy CLI interface. For new functionality, use cli_main.py
+      This file is maintained for backwards compatibility during migration.
 """
 
 import sys

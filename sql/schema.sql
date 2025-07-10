@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS qb_passing_stats (
     -- Raw CSV columns (matching 2024_passing.csv exactly)
     rk INTEGER,  -- Rank
     age INTEGER,  -- Age
-    team VARCHAR(3),  -- Team
+    team VARCHAR(10),  -- Team (allows multi-team players like "nyj,gb")
     pos VARCHAR(5),  -- Position
     g INTEGER,  -- Games
     gs INTEGER,  -- Games Started
@@ -99,9 +99,9 @@ CREATE TABLE IF NOT EXISTS qb_passing_stats (
     CONSTRAINT fk_qb_passing_stats_team FOREIGN KEY (team) REFERENCES teams(team_code) ON DELETE RESTRICT
 );
 
--- QB Splits Type 1 Table (matches advanced_stats_1.csv exactly)
+-- QB Splits Table (matches advanced_stats_1.csv exactly)
 -- Raw data from splits page with ALL columns
-CREATE TABLE IF NOT EXISTS qb_splits_type1 (
+CREATE TABLE IF NOT EXISTS qb_splits (
     id BIGSERIAL PRIMARY KEY,
     pfr_id VARCHAR(20) NOT NULL,
     player_name VARCHAR(100) NOT NULL,
@@ -150,13 +150,13 @@ CREATE TABLE IF NOT EXISTS qb_splits_type1 (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
     -- Constraints
-    CONSTRAINT fk_qb_splits_type1_player FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE,
-    CONSTRAINT unique_player_season_split_type1 UNIQUE(pfr_id, season, split, value)
+    CONSTRAINT fk_qb_splits_player FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE,
+    CONSTRAINT unique_player_season_split UNIQUE(pfr_id, season, split, value)
 );
 
--- QB Splits Type 2 Table (matches advanced_stats.2.csv exactly)
+-- QB Splits Advanced Table (matches advanced_stats.2.csv exactly)
 -- Raw data from advanced splits page with ALL columns
-CREATE TABLE IF NOT EXISTS qb_splits_type2 (
+CREATE TABLE IF NOT EXISTS qb_splits_advanced (
     id BIGSERIAL PRIMARY KEY,
     pfr_id VARCHAR(20) NOT NULL,
     player_name VARCHAR(100) NOT NULL,
@@ -191,32 +191,29 @@ CREATE TABLE IF NOT EXISTS qb_splits_type2 (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
     -- Constraints
-    CONSTRAINT fk_qb_splits_type2_player FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE,
-    CONSTRAINT unique_player_season_split_type2 UNIQUE(pfr_id, season, split, value)
+    CONSTRAINT fk_qb_splits_advanced_player FOREIGN KEY (pfr_id) REFERENCES players(pfr_id) ON DELETE CASCADE,
+    CONSTRAINT unique_player_season_split_advanced UNIQUE(pfr_id, season, split, value)
 );
 
 -- Scraping Log Table (for monitoring and audit trail)
-CREATE TABLE IF NOT EXISTS scraping_log (
+CREATE TABLE IF NOT EXISTS scraping_logs (
     id BIGSERIAL PRIMARY KEY,
-    session_id VARCHAR(36) NOT NULL,
-    season INTEGER NOT NULL CHECK (season >= 1920 AND season <= 2030),
+    session_id VARCHAR(50) NOT NULL,
+    season INTEGER NOT NULL,
     start_time TIMESTAMP WITH TIME ZONE NOT NULL,
     end_time TIMESTAMP WITH TIME ZONE,
-    total_requests INTEGER DEFAULT 0 CHECK (total_requests >= 0),
-    successful_requests INTEGER DEFAULT 0 CHECK (successful_requests >= 0),
-    failed_requests INTEGER DEFAULT 0 CHECK (failed_requests >= 0),
-    total_players INTEGER DEFAULT 0 CHECK (total_players >= 0),
-    total_passing_stats INTEGER DEFAULT 0 CHECK (total_passing_stats >= 0),
-    total_splits_type1 INTEGER DEFAULT 0 CHECK (total_splits_type1 >= 0),
-    total_splits_type2 INTEGER DEFAULT 0 CHECK (total_splits_type2 >= 0),
+    total_requests INTEGER DEFAULT 0,
+    successful_requests INTEGER DEFAULT 0,
+    failed_requests INTEGER DEFAULT 0,
+    total_players INTEGER DEFAULT 0,
+    total_passing_stats INTEGER DEFAULT 0,
+    total_splits INTEGER DEFAULT 0,
+    total_splits_advanced INTEGER DEFAULT 0,
     errors TEXT[],
     warnings TEXT[],
-    rate_limit_violations INTEGER DEFAULT 0 CHECK (rate_limit_violations >= 0),
-    processing_time_seconds DECIMAL(10,3),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Constraints
-    CONSTRAINT valid_requests CHECK (total_requests = successful_requests + failed_requests)
+    rate_limit_violations INTEGER DEFAULT 0,
+    processing_time_seconds DECIMAL(10,2),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Indexes for performance optimization
@@ -241,41 +238,41 @@ CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_td ON qb_passing_stats(td DESC);
 CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_cmp_pct ON qb_passing_stats(cmp_pct DESC);
 CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_qbr ON qb_passing_stats(qbr DESC);
 
--- QB Splits Type 1 table indexes
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_pfr_id ON qb_splits_type1(pfr_id);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_season ON qb_splits_type1(season);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_split ON qb_splits_type1(split);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_value ON qb_splits_type1(value);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_player_season ON qb_splits_type1(pfr_id, season);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_split_value ON qb_splits_type1(split, value);
+-- QB Splits table indexes
+CREATE INDEX IF NOT EXISTS idx_qb_splits_pfr_id ON qb_splits(pfr_id);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_season ON qb_splits(season);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_split ON qb_splits(split);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_value ON qb_splits(value);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_player_season ON qb_splits(pfr_id, season);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_split_value ON qb_splits(split, value);
 
--- QB Splits Type 2 table indexes
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_pfr_id ON qb_splits_type2(pfr_id);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_season ON qb_splits_type2(season);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_split ON qb_splits_type2(split);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_value ON qb_splits_type2(value);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_player_season ON qb_splits_type2(pfr_id, season);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_split_value ON qb_splits_type2(split, value);
+-- QB Splits Advanced table indexes
+CREATE INDEX IF NOT EXISTS idx_qb_splits_advanced_pfr_id ON qb_splits_advanced(pfr_id);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_advanced_season ON qb_splits_advanced(season);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_advanced_split ON qb_splits_advanced(split);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_advanced_value ON qb_splits_advanced(value);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_advanced_player_season ON qb_splits_advanced(pfr_id, season);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_advanced_split_value ON qb_splits_advanced(split, value);
 
 -- Scraping log table indexes
-CREATE INDEX IF NOT EXISTS idx_scraping_log_session_id ON scraping_log(session_id);
-CREATE INDEX IF NOT EXISTS idx_scraping_log_season ON scraping_log(season);
-CREATE INDEX IF NOT EXISTS idx_scraping_log_start_time ON scraping_log(start_time);
+CREATE INDEX IF NOT EXISTS idx_scraping_logs_session_id ON scraping_logs(session_id);
+CREATE INDEX IF NOT EXISTS idx_scraping_logs_season ON scraping_logs(season);
+CREATE INDEX IF NOT EXISTS idx_scraping_logs_start_time ON scraping_logs(start_time);
 
 -- Composite indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_season_rate ON qb_passing_stats(season, rate DESC);
 CREATE INDEX IF NOT EXISTS idx_qb_passing_stats_team_season ON qb_passing_stats(team, season);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type1_season_split ON qb_splits_type1(season, split);
-CREATE INDEX IF NOT EXISTS idx_qb_splits_type2_season_split ON qb_splits_type2(season, split);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_season_split ON qb_splits(season, split);
+CREATE INDEX IF NOT EXISTS idx_qb_splits_advanced_season_split ON qb_splits_advanced(season, split);
 
 -- Trigger function for updating updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
+    NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
 -- Triggers for auto-updating updated_at columns
 CREATE TRIGGER update_players_updated_at 
@@ -286,12 +283,12 @@ CREATE TRIGGER update_qb_passing_stats_updated_at
     BEFORE UPDATE ON qb_passing_stats 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_qb_splits_type1_updated_at 
-    BEFORE UPDATE ON qb_splits_type1 
+CREATE TRIGGER update_qb_splits_updated_at 
+    BEFORE UPDATE ON qb_splits 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_qb_splits_type2_updated_at 
-    BEFORE UPDATE ON qb_splits_type2 
+CREATE TRIGGER update_qb_splits_advanced_updated_at 
+    BEFORE UPDATE ON qb_splits_advanced 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Helpful views for data analysis
@@ -338,21 +335,21 @@ BEGIN
     FROM qb_passing_stats ps
     WHERE ps.pfr_id = target_pfr_id AND ps.season = target_season;
     
-    -- Return splits type 1
+    -- Return splits
     RETURN QUERY
     SELECT 
-        'splits_type1'::VARCHAR(20) as data_type,
-        row_to_json(s1)::JSONB as json_data
-    FROM qb_splits_type1 s1
-    WHERE s1.pfr_id = target_pfr_id AND s1.season = target_season;
+        'splits'::VARCHAR(20) as data_type,
+        row_to_json(s)::JSONB as json_data
+    FROM qb_splits s
+    WHERE s.pfr_id = target_pfr_id AND s.season = target_season;
     
-    -- Return splits type 2
+    -- Return splits advanced
     RETURN QUERY
     SELECT 
-        'splits_type2'::VARCHAR(20) as data_type,
-        row_to_json(s2)::JSONB as json_data
-    FROM qb_splits_type2 s2
-    WHERE s2.pfr_id = target_pfr_id AND s2.season = target_season;
+        'splits_advanced'::VARCHAR(20) as data_type,
+        row_to_json(sa)::JSONB as json_data
+    FROM qb_splits_advanced sa
+    WHERE sa.pfr_id = target_pfr_id AND sa.season = target_season;
     
     RETURN;
 END;
@@ -371,29 +368,29 @@ RETURNS TABLE(
     json_data JSONB
 ) AS $$
 BEGIN
-    -- Return from splits type 1
+    -- Return from splits
     RETURN QUERY
     SELECT 
-        'qb_splits_type1'::VARCHAR(20) as table_name,
-        s1.split,
-        s1.value,
-        row_to_json(s1)::JSONB as json_data
-    FROM qb_splits_type1 s1
-    WHERE s1.pfr_id = target_pfr_id 
-      AND s1.season = target_season 
-      AND s1.split = split_type;
+        'qb_splits'::VARCHAR(20) as table_name,
+        s.split,
+        s.value,
+        row_to_json(s)::JSONB as json_data
+    FROM qb_splits s
+    WHERE s.pfr_id = target_pfr_id 
+      AND s.season = target_season 
+      AND s.split = split_type;
     
-    -- Return from splits type 2
+    -- Return from splits advanced
     RETURN QUERY
     SELECT 
-        'qb_splits_type2'::VARCHAR(20) as table_name,
-        s2.split,
-        s2.value,
-        row_to_json(s2)::JSONB as json_data
-    FROM qb_splits_type2 s2
-    WHERE s2.pfr_id = target_pfr_id 
-      AND s2.season = target_season 
-      AND s2.split = split_type;
+        'qb_splits_advanced'::VARCHAR(20) as table_name,
+        sa.split,
+        sa.value,
+        row_to_json(sa)::JSONB as json_data
+    FROM qb_splits_advanced sa
+    WHERE sa.pfr_id = target_pfr_id 
+      AND sa.season = target_season 
+      AND sa.split = split_type;
     
     RETURN;
 END;
@@ -416,25 +413,25 @@ SELECT
 FROM qb_passing_stats
 UNION ALL
 SELECT 
-    'qb_splits_type1' as table_name,
+    'qb_splits' as table_name,
     COUNT(*) as record_count,
     MIN(scraped_at) as earliest_record,
     MAX(scraped_at) as latest_record
-FROM qb_splits_type1
+FROM qb_splits
 UNION ALL
 SELECT 
-    'qb_splits_type2' as table_name,
+    'qb_splits_advanced' as table_name,
     COUNT(*) as record_count,
     MIN(scraped_at) as earliest_record,
     MAX(scraped_at) as latest_record
-FROM qb_splits_type2
+FROM qb_splits_advanced
 UNION ALL
 SELECT 
-    'scraping_log' as table_name,
+    'scraping_logs' as table_name,
     COUNT(*) as record_count,
     MIN(created_at) as earliest_record,
     MAX(created_at) as latest_record
-FROM scraping_log
+FROM scraping_logs
 ORDER BY table_name;
 
 -- Grant permissions for Supabase

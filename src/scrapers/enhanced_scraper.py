@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 from dataclasses import dataclass
 
-from models.qb_models import Player, QBBasicStats, QBAdvancedStats, QBSplitStats, Team, ScrapingLog
+from models.qb_models import Player, QBBasicStats, QBAdvancedStats, QBSplitStats, QBSplitsType1, Team, ScrapingLog
 from utils.data_utils import (
     safe_int, safe_float, safe_percentage, clean_player_name, 
     generate_player_id, generate_session_id, calculate_processing_time,
@@ -999,31 +999,38 @@ class EnhancedPFRScraper:
         
         for _, row in matching_rows.iterrows():
             try:
-                # Extract stats from the row using the correct column names
-                # The DataFrame columns are: ['Split', 'Value', 'G', 'W', 'L', 'T', 'Cmp', 'Att', 'Inc', 'Cmp%', 'Yds', 'TD', 'Int', 'Rate', 'Sk', 'Yds', 'Y/A', 'AY/A', 'A/G', 'Y/G', 'Att', 'Yds', 'Y/A', 'TD', 'A/G', 'Y/G', 'TD', 'Pts', 'Fmb', 'FL', 'FF', 'FR', 'Yds', 'TD']
-                
-                # Get the raw data from each column using proper pandas Series indexing
-                # Convert Series to scalar values to avoid ambiguous truth value errors
-                games_data = str(row['G'].iloc[0]) if 'G' in row.index and len(row['G']) > 0 else ''  # Games played
-                completions_data = str(row['Cmp'].iloc[0]) if 'Cmp' in row.index and len(row['Cmp']) > 0 else ''  # Completions
-                attempts_data = str(row['Att'].iloc[0]) if 'Att' in row.index and len(row['Att']) > 0 else ''  # Attempts
-                completion_pct_data = str(row['Cmp%'].iloc[0]) if 'Cmp%' in row.index and len(row['Cmp%']) > 0 else ''  # Completion percentage
-                pass_yards_data = str(row['Yds'].iloc[0]) if 'Yds' in row.index and len(row['Yds']) > 0 else ''  # Passing yards
-                pass_tds_data = str(row['TD'].iloc[0]) if 'TD' in row.index and len(row['TD']) > 0 else ''  # Passing touchdowns
-                interceptions_data = str(row['Int'].iloc[0]) if 'Int' in row.index and len(row['Int']) > 0 else ''  # Interceptions
-                rating_data = str(row['Rate'].iloc[0]) if 'Rate' in row.index and len(row['Rate']) > 0 else ''  # Passer rating
-                sacks_data = str(row['Sk'].iloc[0]) if 'Sk' in row.index and len(row['Sk']) > 0 else ''  # Sacks
-                sack_yards_data = str(row['Yds'].iloc[0]) if 'Yds' in row.index and len(row['Yds']) > 0 else ''  # Sack yards (second 'Yds' column)
-                
-                # Additional fields from the extended schema
-                incompletions_data = str(row['Inc'].iloc[0]) if 'Inc' in row.index and len(row['Inc']) > 0 else ''  # Incompletions
-                wins_data = str(row['W'].iloc[0]) if 'W' in row.index and len(row['W']) > 0 else ''  # Wins
-                losses_data = str(row['L'].iloc[0]) if 'L' in row.index and len(row['L']) > 0 else ''  # Losses
-                ties_data = str(row['T'].iloc[0]) if 'T' in row.index and len(row['T']) > 0 else ''  # Ties
-                attempts_per_game_data = str(row['A/G'].iloc[0]) if 'A/G' in row.index and len(row['A/G']) > 0 else ''  # Attempts per game
-                yards_per_game_data = str(row['Y/G'].iloc[0]) if 'Y/G' in row.index and len(row['Y/G']) > 0 else ''  # Yards per game
-                points_data = str(row['Pts'].iloc[0]) if 'Pts' in row.index and len(row['Pts']) > 0 else ''  # Points
-                
+                def get_value(row, col):
+                    if col in row.index:
+                        val = row[col]
+                        if isinstance(val, pd.Series):
+                            return str(val.iloc[0]) if not val.empty else ''
+                        return str(val) if pd.notna(val) else ''
+                    return ''
+
+                games_data = get_value(row, 'G')  # Games played
+                completions_data = get_value(row, 'Cmp')  # Completions
+                attempts_data = get_value(row, 'Att')  # Attempts
+                completion_pct_data = get_value(row, 'Cmp%')  # Completion percentage
+                pass_yards_data = get_value(row, 'Yds')  # Passing yards
+                pass_tds_data = get_value(row, 'TD')  # Passing touchdowns
+                interceptions_data = get_value(row, 'Int')  # Interceptions
+                rating_data = get_value(row, 'Rate')  # Passer rating
+                sacks_data = get_value(row, 'Sk')  # Sacks
+                sack_yards_data = get_value(row, 'Yds')  # Sack yards (second 'Yds' column)
+                incompletions_data = get_value(row, 'Inc')  # Incompletions
+                wins_data = get_value(row, 'W')  # Wins
+                losses_data = get_value(row, 'L')  # Losses
+                ties_data = get_value(row, 'T')  # Ties
+                attempts_per_game_data = get_value(row, 'A/G')  # Attempts per game
+                yards_per_game_data = get_value(row, 'Y/G')  # Yards per game
+                points_data = get_value(row, 'Pts')  # Points
+                fumbles_data = get_value(row, 'Fmb')  # Fumbles
+                fumbles_lost_data = get_value(row, 'FL')  # Fumbles lost
+                fumbles_forced_data = get_value(row, 'FF')  # Fumbles forced
+                fumbles_recovered_data = get_value(row, 'FR')  # Fumbles recovered
+                # For net_yards_per_attempt
+                net_yards_per_attempt_data = get_value(row, 'Y/A')
+
                 # Rush statistics - need to handle duplicate column names properly
                 # The DataFrame has duplicate column names, so we need to access by position
                 rush_attempts_data = ''
@@ -1053,10 +1060,10 @@ class EnhancedPFRScraper:
                         rush_yards_per_game_data = str(row.iloc[yg_columns[1]]) if yg_columns[1] < len(row) else ''
                 
                 # Fumble statistics
-                fumbles_data = str(row['Fmb'].iloc[0]) if 'Fmb' in row.index and len(row['Fmb']) > 0 else ''  # Fumbles
-                fumbles_lost_data = str(row['FL'].iloc[0]) if 'FL' in row.index and len(row['FL']) > 0 else ''  # Fumbles lost
-                fumbles_forced_data = str(row['FF'].iloc[0]) if 'FF' in row.index and len(row['FF']) > 0 else ''  # Fumbles forced
-                fumbles_recovered_data = str(row['FR'].iloc[0]) if 'FR' in row.index and len(row['FR']) > 0 else ''  # Fumbles recovered
+                fumbles_data = str(row['Fmb']) if 'Fmb' in row.index and pd.notna(row['Fmb']) else ''  # Fumbles
+                fumbles_lost_data = str(row['FL']) if 'FL' in row.index and pd.notna(row['FL']) else ''  # Fumbles lost
+                fumbles_forced_data = str(row['FF']) if 'FF' in row.index and pd.notna(row['FF']) else ''  # Fumbles forced
+                fumbles_recovered_data = str(row['FR']) if 'FR' in row.index and pd.notna(row['FR']) else ''  # Fumbles recovered
                 
                 # Fumble recovery stats - need to handle duplicate column names
                 fumble_recovery_yards_data = ''
@@ -1078,45 +1085,45 @@ class EnhancedPFRScraper:
                 logger.debug(f"Raw data for {split_category}: Games={games_data}, Cmp={completions_data}, Att={attempts_data}, Yds={pass_yards_data}")
                 
                 # Create split stats object with extracted data
-                split_stats = QBSplitStats(
+                split_stats = QBSplitsType1(
                     pfr_id=pfr_id,
                     player_name=player_name,
-                    team=team,
                     season=season,
-                    split_type=split_type,
-                    split_category=split_category,
-                    games=safe_int(games_data) if pd.notna(games_data) and games_data != '' else 0,
-                    completions=safe_int(completions_data) if pd.notna(completions_data) and completions_data != '' else 0,
-                    attempts=safe_int(attempts_data) if pd.notna(attempts_data) and attempts_data != '' else 0,
-                    completion_pct=safe_percentage(completion_pct_data) if pd.notna(completion_pct_data) and completion_pct_data != '' else 0.0,
-                    pass_yards=safe_int(pass_yards_data) if pd.notna(pass_yards_data) and pass_yards_data != '' else 0,
-                    pass_tds=safe_int(pass_tds_data) if pd.notna(pass_tds_data) and pass_tds_data != '' else 0,
-                    interceptions=safe_int(interceptions_data) if pd.notna(interceptions_data) and interceptions_data != '' else 0,
-                    rating=safe_float(rating_data) if pd.notna(rating_data) and rating_data != '' else 0.0,
-                    sacks=safe_int(sacks_data) if pd.notna(sacks_data) and sacks_data != '' else 0,
-                    sack_yards=safe_int(sack_yards_data) if pd.notna(sack_yards_data) and sack_yards_data != '' else 0,
-                    net_yards_per_attempt=safe_float(str(row['Y/A'].iloc[0])) if 'Y/A' in row.index and len(row['Y/A']) > 0 else 0.0,
+                    split=split_type,
+                    value=split_category,
+                    g=safe_int(games_data) if pd.notna(games_data) and games_data != '' else 0,
+                    cmp=safe_int(completions_data) if pd.notna(completions_data) and completions_data != '' else 0,
+                    att=safe_int(attempts_data) if pd.notna(attempts_data) and attempts_data != '' else 0,
+                    cmp_pct=safe_percentage(completion_pct_data) if pd.notna(completion_pct_data) and completion_pct_data != '' else 0.0,
+                    yds=safe_int(pass_yards_data) if pd.notna(pass_yards_data) and pass_yards_data != '' else 0,
+                    td=safe_int(pass_tds_data) if pd.notna(pass_tds_data) and pass_tds_data != '' else 0,
+                    int=safe_int(interceptions_data) if pd.notna(interceptions_data) and interceptions_data != '' else 0,
+                    rate=safe_float(rating_data) if pd.notna(rating_data) and rating_data != '' else 0.0,
+                    sk=safe_int(sacks_data) if pd.notna(sacks_data) and sacks_data != '' else 0,
+                    sk_yds=safe_int(sack_yards_data) if pd.notna(sack_yards_data) and sack_yards_data != '' else 0,
+                    y_a=safe_float(net_yards_per_attempt_data) if pd.notna(net_yards_per_attempt_data) and net_yards_per_attempt_data != '' else 0.0,
+                    ay_a=safe_float(net_yards_per_attempt_data) if pd.notna(net_yards_per_attempt_data) and net_yards_per_attempt_data != '' else 0.0,  # Using same value as y_a for now
                     scraped_at=scraped_at,
                     # Additional fields
-                    rush_attempts=safe_int(rush_attempts_data) if pd.notna(rush_attempts_data) and rush_attempts_data != '' else 0,
-                    rush_yards=safe_int(rush_yards_data) if pd.notna(rush_yards_data) and rush_yards_data != '' else 0,
-                    rush_tds=safe_int(rush_tds_data) if pd.notna(rush_tds_data) and rush_tds_data != '' else 0,
-                    fumbles=safe_int(fumbles_data) if pd.notna(fumbles_data) and fumbles_data != '' else 0,
-                    fumbles_lost=safe_int(fumbles_lost_data) if pd.notna(fumbles_lost_data) and fumbles_lost_data != '' else 0,
-                    fumbles_forced=safe_int(fumbles_forced_data) if pd.notna(fumbles_forced_data) and fumbles_forced_data != '' else 0,
-                    fumbles_recovered=safe_int(fumbles_recovered_data) if pd.notna(fumbles_recovered_data) and fumbles_recovered_data != '' else 0,
-                    fumble_recovery_yards=safe_int(fumble_recovery_yards_data) if pd.notna(fumble_recovery_yards_data) and fumble_recovery_yards_data != '' else 0,
-                    fumble_recovery_tds=safe_int(fumble_recovery_tds_data) if pd.notna(fumble_recovery_tds_data) and fumble_recovery_tds_data != '' else 0,
-                    incompletions=safe_int(incompletions_data) if pd.notna(incompletions_data) and incompletions_data != '' else 0,
-                    wins=safe_int(wins_data) if pd.notna(wins_data) and wins_data != '' else 0,
-                    losses=safe_int(losses_data) if pd.notna(losses_data) and losses_data != '' else 0,
-                    ties=safe_int(ties_data) if pd.notna(ties_data) and ties_data != '' else 0,
-                    attempts_per_game=safe_float(attempts_per_game_data) if pd.notna(attempts_per_game_data) and attempts_per_game_data != '' else None,
-                    yards_per_game=safe_float(yards_per_game_data) if pd.notna(yards_per_game_data) and yards_per_game_data != '' else None,
-                    rush_attempts_per_game=safe_float(rush_attempts_per_game_data) if pd.notna(rush_attempts_per_game_data) and rush_attempts_per_game_data != '' else None,
-                    rush_yards_per_game=safe_float(rush_yards_per_game_data) if pd.notna(rush_yards_per_game_data) and rush_yards_per_game_data != '' else None,
-                    total_tds=total_tds,
-                    points=safe_int(points_data) if pd.notna(points_data) and points_data != '' else 0
+                    rush_att=safe_int(rush_attempts_data) if pd.notna(rush_attempts_data) and rush_attempts_data != '' else 0,
+                    rush_yds=safe_int(rush_yards_data) if pd.notna(rush_yards_data) and rush_yards_data != '' else 0,
+                    rush_td=safe_int(rush_tds_data) if pd.notna(rush_tds_data) and rush_tds_data != '' else 0,
+                    fmb=safe_int(fumbles_data) if pd.notna(fumbles_data) and fumbles_data != '' else 0,
+                    fl=safe_int(fumbles_lost_data) if pd.notna(fumbles_lost_data) and fumbles_lost_data != '' else 0,
+                    ff=safe_int(fumbles_forced_data) if pd.notna(fumbles_forced_data) and fumbles_forced_data != '' else 0,
+                    fr=safe_int(fumbles_recovered_data) if pd.notna(fumbles_recovered_data) and fumbles_recovered_data != '' else 0,
+                    fr_yds=safe_int(fumble_recovery_yards_data) if pd.notna(fumble_recovery_yards_data) and fumble_recovery_yards_data != '' else 0,
+                    fr_td=safe_int(fumble_recovery_tds_data) if pd.notna(fumble_recovery_tds_data) and fumble_recovery_tds_data != '' else 0,
+                    inc=safe_int(incompletions_data) if pd.notna(incompletions_data) and incompletions_data != '' else 0,
+                    w=safe_int(get_value(row, 'W')) if get_value(row, 'W') != '' else 0,
+                    l=safe_int(get_value(row, 'L')) if get_value(row, 'L') != '' else 0,
+                    t=safe_int(get_value(row, 'T')) if get_value(row, 'T') != '' else 0,
+                    a_g=safe_float(attempts_per_game_data) if pd.notna(attempts_per_game_data) and attempts_per_game_data != '' else None,
+                    y_g=safe_float(yards_per_game_data) if pd.notna(yards_per_game_data) and yards_per_game_data != '' else None,
+                    rush_a_g=safe_float(rush_attempts_per_game_data) if pd.notna(rush_attempts_per_game_data) and rush_attempts_per_game_data != '' else None,
+                    rush_y_g=safe_float(rush_yards_per_game_data) if pd.notna(rush_yards_per_game_data) and rush_yards_per_game_data != '' else None,
+                    total_td=total_tds,
+                    pts=safe_int(points_data) if pd.notna(points_data) and points_data != '' else 0
                 )
                 
                 errors = split_stats.validate()

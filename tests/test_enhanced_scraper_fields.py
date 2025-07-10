@@ -22,45 +22,47 @@ def test_qb_split_stats_model():
     print("Testing QBSplitStats model with all fields...")
     
     # Create a test QBSplitStats object with all fields populated
+    # Using the actual field names from QBSplitsType1 model
     test_stats = QBSplitStats(
-        player_id="testplayer",
+        pfr_id="testplayer",
         player_name="Test Player",
-        team="CIN",
         season=2024,
-        split_type="basic_splits",
-        split_category="Home",
-        games=8,
-        completions=223,
-        attempts=299,
-        completion_pct=74.58,
-        pass_yards=2338,
-        pass_tds=23,
-        interceptions=4,
-        rating=116.90,
-        sacks=25,
-        sack_yards=160,
-        net_yards_per_attempt=7.82,
+        split="Place",  # Split type (e.g., "League", "Place", "Result")
+        value="Home",   # Split value (e.g., "NFL", "Home", "Win")
+        g=8,            # Games
+        w=6,            # Wins
+        l=2,            # Losses
+        t=0,            # Ties
+        cmp=223,        # Completions
+        att=299,        # Attempts
+        inc=76,         # Incompletions
+        cmp_pct=74.58,  # Completion %
+        yds=2338,       # Passing Yards
+        td=23,          # Passing TDs
+        int=4,          # Interceptions
+        rate=116.90,    # Passer Rating
+        sk=25,          # Sacks
+        sk_yds=160,     # Sack Yards
+        y_a=7.82,       # Y/A (Yards per Attempt)
+        ay_a=8.1,       # AY/A (Adjusted Yards per Attempt)
+        a_g=37.4,       # A/G (Attempts per Game)
+        y_g=292.3,      # Y/G (Yards per Game)
+        rush_att=15,    # Rush Attempts
+        rush_yds=89,    # Rush Yards
+        rush_y_a=5.9,   # Rush Y/A
+        rush_td=2,      # Rush TDs
+        rush_a_g=1.9,   # Rush A/G (Rush Attempts per Game)
+        rush_y_g=11.1,  # Rush Y/G (Rush Yards per Game)
+        total_td=25,    # Total TDs
+        pts=168,        # Points
+        fmb=3,          # Fumbles
+        fl=1,           # Fumbles Lost
+        ff=0,           # Fumbles Forced
+        fr=0,           # Fumbles Recovered
+        fr_yds=0,       # Fumble Recovery Yards
+        fr_td=0,        # Fumble Recovery TDs
         scraped_at=datetime.now(),
-        # Additional fields
-        rush_attempts=15,
-        rush_yards=89,
-        rush_tds=2,
-        fumbles=3,
-        fumbles_lost=1,
-        fumbles_forced=0,
-        fumbles_recovered=0,
-        fumble_recovery_yards=0,
-        fumble_recovery_tds=0,
-        incompletions=76,
-        wins=6,
-        losses=2,
-        ties=0,
-        attempts_per_game=37.4,
-        yards_per_game=292.3,
-        rush_attempts_per_game=1.9,
-        rush_yards_per_game=11.1,
-        total_tds=25,
-        points=168
+        updated_at=datetime.now()
     )
     
     # Test validation
@@ -71,22 +73,20 @@ def test_qb_split_stats_model():
     else:
         print("✓ QBSplitStats model validation passed")
     
-    # Test to_dict conversion
+    # Test from_dict conversion
     try:
-        stats_dict = test_stats.to_dict()
-        print(f"✓ QBSplitStats to_dict conversion successful")
+        stats_dict = test_stats.__dict__
+        print(f"✓ QBSplitStats dictionary conversion successful")
         print(f"  - Dictionary has {len(stats_dict)} fields")
         
         # Check that all expected fields are present
         expected_fields = [
-            'player_id', 'player_name', 'team', 'season', 'split_type', 'split_category',
-            'games', 'completions', 'attempts', 'completion_pct', 'pass_yards', 'pass_tds',
-            'interceptions', 'rating', 'sacks', 'sack_yards', 'net_yards_per_attempt',
-            'scraped_at', 'rush_attempts', 'rush_yards', 'rush_tds', 'fumbles',
-            'fumbles_lost', 'fumbles_forced', 'fumbles_recovered', 'fumble_recovery_yards',
-            'fumble_recovery_tds', 'incompletions', 'wins', 'losses', 'ties',
-            'attempts_per_game', 'yards_per_game', 'rush_attempts_per_game',
-            'rush_yards_per_game', 'total_tds', 'points'
+            'pfr_id', 'player_name', 'season', 'split', 'value',
+            'g', 'w', 'l', 't', 'cmp', 'att', 'inc', 'cmp_pct', 'yds', 'td',
+            'int', 'rate', 'sk', 'sk_yds', 'y_a', 'ay_a', 'a_g', 'y_g',
+            'rush_att', 'rush_yds', 'rush_y_a', 'rush_td', 'rush_a_g', 'rush_y_g',
+            'total_td', 'pts', 'fmb', 'fl', 'ff', 'fr', 'fr_yds', 'fr_td',
+            'scraped_at', 'updated_at'
         ]
         
         missing_fields = [field for field in expected_fields if field not in stats_dict]
@@ -99,7 +99,7 @@ def test_qb_split_stats_model():
         return True
         
     except Exception as e:
-        print(f"✗ Error in to_dict conversion: {e}")
+        print(f"✗ Error in dictionary conversion: {e}")
         return False
 
 def test_data_utils():

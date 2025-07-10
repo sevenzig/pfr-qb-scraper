@@ -1,8 +1,0 @@
-2025-07-08 08:46:10,770 - database.db_manager - INFO - Database connection pool initialized with 10 connections
-2025-07-08 08:46:10,771 - database.db_manager - INFO - Creating database tables...
-2025-07-08 08:46:10,902 - database.db_manager - ERROR - Database cursor error: type "game_result" already exists
-
-2025-07-08 08:46:10,940 - database.db_manager - ERROR - Database connection error: type "game_result" already exists
-
-2025-07-08 08:46:10,941 - database.db_manager - ERROR - Error creating tables: type "game_result" already exists
-
