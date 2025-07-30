@@ -14,12 +14,9 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 
-# Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
-from ..scrapers.nfl_qb_scraper import NFLQBDataPipeline
-from ..database.db_manager import DatabaseManager
-from ..config.config import config
+from src.scrapers.nfl_qb_scraper import NFLQBDataPipeline
+from src.database.db_manager import DatabaseManager
+from src.config.config import config
 
 logger = logging.getLogger(__name__)
 

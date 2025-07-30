@@ -16,9 +16,6 @@ import json
 import subprocess
 import importlib.util
 
-# Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
 logger = logging.getLogger(__name__)
 
 

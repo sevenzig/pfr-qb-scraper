@@ -8,51 +8,32 @@ import sys
 import os
 import argparse
 import logging
-from typing import Dict, List, Type
+from typing import Dict, List, Type, Optional
 
-# Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+# Absolute imports from installed package
+from src.cli.base_command import BaseCommand
+from src.cli.commands import (
+    ScrapeCommand,
+    ValidateCommand,
+    MonitorCommand,
+    HealthCommand,
+    CleanupCommand,
+    DataCommand,
+    BatchCommand,
+    PerformanceCommand
+)
+from src.cli.commands.fix_splits_command import FixSplitsCommand
+from src.cli.commands.test_splits_command import TestSplitsCommand
+from src.cli.commands.test_unified_command import TestUnifiedCommand
+from src.cli.quality_commands import QualityValidateCommand
+from src.cli.legacy_commands import LegacyCommand, MigrateCommand
 
-# Handle relative imports when running as module
-try:
-    from .base_command import BaseCommand
-except ImportError:
-    # Fallback for direct execution
-    from base_command import BaseCommand
-try:
-    from .commands import (
-        ScrapeCommand,
-        ValidateCommand,
-        MonitorCommand,
-        HealthCommand,
-        CleanupCommand,
-        DataCommand,
-        BatchCommand
-    )
-    from .quality_commands import QualityValidateCommand
-    from .legacy_commands import LegacyCommand, MigrateCommand
-except ImportError:
-    # Fallback for direct execution
-    from commands import (
-        ScrapeCommand,
-        ValidateCommand,
-        MonitorCommand,
-        HealthCommand,
-        CleanupCommand,
-        DataCommand,
-        BatchCommand
-    )
-    from quality_commands import QualityValidateCommand
-    from legacy_commands import LegacyCommand, MigrateCommand
 # Use try/except for optional imports
 try:
-    from config.config import config
+    from src.config.config import config
 except ImportError:
-    try:
-        from src.config.config import config
-    except ImportError:
-        # Fallback for testing
-        config = None
+    # Fallback for testing
+    config = None
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +52,14 @@ class CLIManager:
             ScrapeCommand,
             ValidateCommand,
             MonitorCommand,
+            PerformanceCommand,
             HealthCommand,
             CleanupCommand,
             DataCommand,
             BatchCommand,
+            FixSplitsCommand,
+            TestSplitsCommand,
+            TestUnifiedCommand,
             QualityValidateCommand,
             LegacyCommand,
             MigrateCommand
@@ -88,7 +73,7 @@ class CLIManager:
             for alias in command.aliases:
                 self.aliases[alias] = command.name
     
-    def get_command(self, name: str) -> BaseCommand:
+    def get_command(self, name: str) -> Optional[BaseCommand]:
         """Get command by name or alias"""
         # Check if it's an alias first
         if name in self.aliases:
@@ -103,7 +88,7 @@ class CLIManager:
     def create_parser(self) -> argparse.ArgumentParser:
         """Create main argument parser with all commands"""
         parser = argparse.ArgumentParser(
-            prog='nfl-qb-scraper',
+            prog='pfr-qb-scraper',
             description='NFL QB Data Scraping System CLI',
             formatter_class=argparse.RawDescriptionHelpFormatter,
             epilog=self._get_examples_text()
@@ -200,7 +185,7 @@ Examples:
         logging.getLogger('urllib3').setLevel(logging.WARNING)
         logging.getLogger('requests').setLevel(logging.WARNING)
     
-    def run(self, args: List[str] = None) -> int:
+    def run(self, args: Optional[List[str]] = None) -> int:
         """
         Main CLI entry point
         

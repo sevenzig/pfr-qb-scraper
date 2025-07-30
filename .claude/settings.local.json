@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"C:\\Users\\scootypuffjr\\Projects\\pfr-qb-scraper\")",
+      "Bash(python -c \"import ast; ast.parse(open(''src/cli/commands/__init__.py'').read()); print(''commands/__init__.py: Syntax OK'')\")",
+      "Bash(python -c \"import ast; ast.parse(open(''src/cli/cli_main.py'').read()); print(''cli_main.py: Syntax OK'')\")",
+      "Bash(python -c \"from src.cli.cli_main import main; print(''Complete import chain: SUCCESS'')\")",
+      "Bash(python -c \"from src.scrapers.splits_extractor import SplitsExtractor; print(''SplitsExtractor import: SUCCESS'')\")",
+      "Bash(python test_simplified_extraction.py:*)",
+      "Bash(grep:*)",
+      "Bash(python:*)"
+    ],
+    "deny": []
+  }
+}

@@ -17,23 +17,15 @@ from enum import Enum
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
 try:
-    from core.scraper import CoreScraper
-    from database.db_manager import DatabaseManager
-    from config.config import config
+    from src.core.scraper import CoreScraper
+    from src.database.db_manager import DatabaseManager
+    from src.config.config import config
 except ImportError:
-    try:
-        from src.core.scraper import CoreScraper
-        from src.database.db_manager import DatabaseManager
-        from src.config.config import config
-    except ImportError:
-        # Fallback for testing
-        CoreScraper = None
-        DatabaseManager = None
-        config = None
+    # Fallback for testing
+    CoreScraper = None
+    DatabaseManager = None
+    config = None
 
 logger = logging.getLogger(__name__)
 

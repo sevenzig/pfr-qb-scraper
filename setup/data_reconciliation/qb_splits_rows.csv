@@ -1,0 +1,5 @@
+id,pfr_id,player_name,season,split,value,g,w,l,t,cmp,att,inc,cmp_pct,yds,td,int,rate,sk,sk_yds,y_a,ay_a,a_g,y_g,rush_att,rush_yds,rush_y_a,rush_td,rush_a_g,rush_y_g,total_td,pts,fmb,fl,ff,fr,fr_yds,fr_td,scraped_at,updated_at
+2960,burrjo01,Joe Burrow,2024,basic_splits,Buffalo Bills,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00
+2961,burrjo01,Joe Burrow,2024,basic_splits,Miami Dolphins,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00
+2962,burrjo01,Joe Burrow,2024,basic_splits,New York Jets,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00
+2963,burrjo01,Joe Burrow,2024,basic_splits,New England Patriots,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00

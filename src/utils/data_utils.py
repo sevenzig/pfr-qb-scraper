@@ -6,95 +6,64 @@ Handles data validation, conversion, and normalization
 
 import re
 import logging
-from typing import Union, Optional, Dict, Any
+from typing import Union, Optional, Dict, Any, List
 from datetime import datetime
+import pandas as pd
+from io import StringIO
 
 logger = logging.getLogger(__name__)
 
-def safe_int(value: Union[str, int, float, None], default: int = 0) -> int:
-    """
-    Safely convert value to integer
-    
-    Args:
-        value: Value to convert
-        default: Default value if conversion fails
-        
-    Returns:
-        Integer value or default
-    """
-    if value is None or value == '':
-        return default
+def safe_int(value: Any) -> Optional[int]:
+    """Safely convert value to integer, returning None if conversion fails"""
+    if value is None or value == '' or pd.isna(value):
+        return None
     try:
-        # Handle percentage strings
-        if isinstance(value, str) and value.endswith('%'):
-            return int(float(value[:-1]))
+        # Handle percentage strings like "70.55"
+        if isinstance(value, str):
+            value = value.replace('%', '')
         return int(float(str(value)))
     except (ValueError, TypeError):
-        return default
+        return None
 
-def safe_float(value: Union[str, int, float, None], default: float = 0.0) -> float:
-    """
-    Safely convert value to float
-    
-    Args:
-        value: Value to convert
-        default: Default value if conversion fails
-        
-    Returns:
-        Float value or default
-    """
-    if value is None or value == '':
-        return default
+def safe_float(value: Any) -> Optional[float]:
+    """Safely convert value to float, returning None if conversion fails"""
+    if value is None or value == '' or pd.isna(value):
+        return None
     try:
-        # Handle percentage strings
-        if isinstance(value, str) and value.endswith('%'):
-            return float(value[:-1])
+        # Handle percentage strings like "70.55"
+        if isinstance(value, str):
+            value = value.replace('%', '')
         return float(str(value))
     except (ValueError, TypeError):
-        return default
+        return None
 
-def safe_percentage(value: Union[str, int, float, None], default: float = 0.0) -> float:
-    """
-    Safely convert percentage value to float
-    
-    Args:
-        value: Percentage value to convert (may include % symbol)
-        default: Default value if conversion fails
-        
-    Returns:
-        Float percentage value or default
-    """
-    if value is None or value == '':
-        return default
+def safe_percentage(value: Any) -> Optional[float]:
+    """Safely convert percentage value to float, handling % symbols"""
+    if value is None or value == '' or pd.isna(value):
+        return None
     try:
         if isinstance(value, str):
-            # Remove % symbol if present
-            clean_value = value.replace('%', '').strip()
-            return float(clean_value)
-        return float(value)
+            value = value.replace('%', '')
+        return float(str(value))
     except (ValueError, TypeError):
-        return default
+        return None
 
 def clean_player_name(name: str) -> str:
-    """
-    Clean and normalize player name
-    
-    Args:
-        name: Raw player name
-        
-    Returns:
-        Cleaned player name
-    """
+    """Clean player name for consistent formatting"""
     if not name:
         return ""
     
-    # Remove extra whitespace
-    name = ' '.join(name.split())
+    # Remove extra whitespace and normalize
+    cleaned = re.sub(r'\s+', ' ', name.strip())
     
-    # Handle common name formatting issues
-    name = name.replace('*', '').replace('+', '')  # Remove PFR indicators
+    # Handle common name variations
+    cleaned = cleaned.replace(' Jr.', ' Jr')
+    cleaned = cleaned.replace(' Sr.', ' Sr')
+    cleaned = cleaned.replace(' III', '')
+    cleaned = cleaned.replace(' II', '')
+    cleaned = cleaned.replace(' IV', '')
     
-    return name.strip()
+    return cleaned
 
 def extract_pfr_id(player_url: str) -> Optional[str]:
     """
@@ -140,6 +109,159 @@ def generate_player_id(player_name: str, player_url: Optional[str] = None) -> st
     # Convert to lowercase, remove spaces and special chars
     cleaned = ''.join(c.lower() for c in player_name if c.isalnum())
     return cleaned[:20]  # Limit to 20 characters
+
+# ------------------------------------------------------------------
+# URL helpers
+# ------------------------------------------------------------------
+
+
+def build_splits_url(pfr_id: str, season: int) -> str:
+    """Construct the Pro-Football-Reference splits page URL for a given player and season.
+
+    Args:
+        pfr_id: The canonical 8-character PFR player identifier (e.g. ``'HurtJa00'`` → lowercase is fine).
+        season: Season year.
+
+    Returns:
+        Full https URL to the splits page.
+    """
+    if not pfr_id or len(pfr_id) < 2:
+        raise ValueError("Invalid PFR id")
+
+    pfr_id = pfr_id.strip()
+    first_letter = pfr_id[0].upper()
+    # PFR uses the original case pattern e.g. BurrJo00, not Burrjo00
+    player_code = pfr_id
+
+    return f"https://www.pro-football-reference.com/players/{first_letter}/{player_code}/splits/{season}/"
+
+
+def build_enhanced_splits_url(pfr_id: str, season: int, fallback_methods: bool = True) -> Optional[str]:
+    """
+    Enhanced splits URL construction with multiple fallback mechanisms
+    
+    Args:
+        pfr_id: Player's PFR ID
+        season: Season year
+        fallback_methods: Whether to use fallback URL construction methods
+        
+    Returns:
+        Constructed splits URL or None if all methods fail
+    """
+    if not pfr_id or not pfr_id.strip():
+        logger.error("Invalid PFR ID provided for URL construction")
+        return None
+    
+    pfr_id = pfr_id.strip()
+    
+    # Method 1: Use the standard build_splits_url function
+    try:
+        url = build_splits_url(pfr_id, season)
+        logger.debug(f"Built splits URL using standard method: {url}")
+        return url
+    except Exception as e:
+        logger.warning(f"Standard URL construction failed: {e}")
+    
+    if not fallback_methods:
+        return None
+    
+    # Method 2: Handle different PFR ID formats
+    try:
+        if len(pfr_id) < 2:
+            logger.error(f"PFR ID too short: {pfr_id}")
+            return None
+        
+        first_letter = pfr_id[0].upper()
+        
+        # Handle different PFR ID formats
+        if len(pfr_id) >= 8:
+            # Standard format: BurrJo00
+            player_code = pfr_id
+        elif len(pfr_id) == 7:
+            # Short format: burrjo01
+            player_code = pfr_id
+        else:
+            # Very short format - try to pad
+            player_code = pfr_id.ljust(7, '0')
+        
+        url = f"https://www.pro-football-reference.com/players/{first_letter}/{player_code}/splits/{season}/"
+        logger.debug(f"Built splits URL using fallback method: {url}")
+        return url
+        
+    except Exception as e:
+        logger.error(f"Fallback URL construction failed: {e}")
+        return None
+
+
+def validate_splits_url(url: str) -> bool:
+    """
+    Validate a splits URL format
+    
+    Args:
+        url: URL to validate
+        
+    Returns:
+        True if URL format is valid, False otherwise
+    """
+    if not url:
+        return False
+    
+    # Check basic URL structure
+    expected_pattern = r'https://www\.pro-football-reference\.com/players/[A-Z]/[A-Za-z0-9]+/splits/\d{4}/'
+    if not re.match(expected_pattern, url):
+        return False
+    
+    # Check for valid season year
+    season_match = re.search(r'/splits/(\d{4})/', url)
+    if not season_match:
+        return False
+    
+    season = int(season_match.group(1))
+    if season < 1920 or season > 2030:
+        return False
+    
+    return True
+
+
+def extract_pfr_id_from_splits_url(url: str) -> Optional[str]:
+    """
+    Extract PFR ID from a splits URL
+    
+    Args:
+        url: Splits URL
+        
+    Returns:
+        PFR ID or None if extraction fails
+    """
+    if not url:
+        return None
+    
+    # Pattern: /players/{first_letter}/{player_id}/splits/{season}/
+    match = re.search(r'/players/[A-Z]/([A-Za-z0-9]+)/splits/\d{4}/', url)
+    return match.group(1) if match else None
+
+
+def build_splits_url_from_player_url(player_url: str, season: int) -> Optional[str]:
+    """
+    Build splits URL from a player's main page URL
+    
+    Args:
+        player_url: Player's main PFR URL
+        season: Season year
+        
+    Returns:
+        Splits URL or None if construction fails
+    """
+    if not player_url:
+        return None
+    
+    # Extract PFR ID from player URL
+    pfr_id = extract_pfr_id(player_url)
+    if not pfr_id:
+        return None
+    
+    # Build splits URL using the extracted PFR ID
+    return build_enhanced_splits_url(pfr_id, season)
 
 def normalize_pfr_team_code(team_code: str) -> str:
     """
@@ -326,18 +448,253 @@ def format_duration(seconds: float) -> str:
         return f"{hours:.1f}h"
 
 def calculate_processing_time(start_time: datetime, end_time: datetime) -> float:
-    """
-    Calculate processing time between two timestamps
-    
-    Args:
-        start_time: Start timestamp
-        end_time: End timestamp
-        
-    Returns:
-        Processing time in seconds
-    """
-    if not start_time or not end_time:
-        return 0.0
-    
+    """Calculate processing time in seconds"""
     delta = end_time - start_time
     return delta.total_seconds() 
+
+def parse_qb_splits_csv_by_position(csv_content: str) -> List[Dict[str, Any]]:
+    """
+    Parse QB splits CSV content by column position to handle duplicate column names.
+    
+    This function parses the CSV exactly as it appears in advanced_stats_1.csv,
+    handling duplicate column names like 'Yds', 'TD', 'Att', 'Y/A', 'A/G', 'Y/G'
+    by using their position in the CSV rather than their names.
+    
+    CSV Structure (34 columns):
+    1: Split, 2: Value, 3: G, 4: W, 5: L, 6: T, 7: Cmp, 8: Att, 9: Inc, 10: Cmp%, 
+    11: Yds, 12: TD, 13: Int, 14: Rate, 15: Sk, 16: Yds, 17: Y/A, 18: AY/A, 19: A/G, 20: Y/G, 
+    21: Att, 22: Yds, 23: Y/A, 24: TD, 25: A/G, 26: Y/G, 27: TD, 28: Pts, 29: Fmb, 30: FL, 
+    31: FF, 32: FR, 33: Yds, 34: TD
+    
+    Args:
+        csv_content: Raw CSV content as string
+        
+    Returns:
+        List of dictionaries containing parsed split data
+    """
+    try:
+        # Read CSV with pandas, but don't use column names for parsing
+        df = pd.read_csv(StringIO(csv_content), header=0)
+        
+        # Get the actual column names from the header
+        column_names = df.columns.tolist()
+        logger.info(f"CSV columns: {column_names}")
+        
+        # Verify we have the expected number of columns
+        if len(column_names) != 34:
+            logger.error(f"Expected 34 columns, got {len(column_names)}")
+            return []
+        
+        parsed_splits = []
+        
+        for index, row in df.iterrows():
+            try:
+                # Parse by position (0-indexed, so subtract 1 from CSV column numbers)
+                split_data = {
+                    # Split identifiers
+                    'split': str(row.iloc[0]) if pd.notna(row.iloc[0]) else None,  # Col 1
+                    'value': str(row.iloc[1]) if pd.notna(row.iloc[1]) else None,  # Col 2
+                    
+                    # Game Stats (Cols 3-6)
+                    'g': safe_int(row.iloc[2]),   # Games
+                    'w': safe_int(row.iloc[3]),   # Wins
+                    'l': safe_int(row.iloc[4]),   # Losses
+                    't': safe_int(row.iloc[5]),   # Ties
+                    
+                    # Passing Stats (Cols 7-20)
+                    'cmp': safe_int(row.iloc[6]),      # Completions
+                    'att': safe_int(row.iloc[7]),      # Passing Attempts
+                    'inc': safe_int(row.iloc[8]),      # Incompletions
+                    'cmp_pct': safe_percentage(row.iloc[9]),  # Completion %
+                    'yds': safe_int(row.iloc[10]),     # Passing Yards
+                    'td': safe_int(row.iloc[11]),      # Passing TDs
+                    'int': safe_int(row.iloc[12]),     # Interceptions
+                    'rate': safe_float(row.iloc[13]),  # Passer Rating
+                    'sk': safe_int(row.iloc[14]),      # Sacks
+                    'sk_yds': safe_int(row.iloc[15]),  # Sack Yards
+                    'y_a': safe_float(row.iloc[16]),   # Passing Y/A
+                    'ay_a': safe_float(row.iloc[17]),  # AY/A
+                    'a_g': safe_float(row.iloc[18]),   # Passing A/G
+                    'y_g': safe_float(row.iloc[19]),   # Passing Y/G
+                    
+                    # Rushing Stats (Cols 21-26)
+                    'rush_att': safe_int(row.iloc[20]),    # Rush Attempts
+                    'rush_yds': safe_int(row.iloc[21]),    # Rush Yards
+                    'rush_y_a': safe_float(row.iloc[22]),  # Rush Y/A
+                    'rush_td': safe_int(row.iloc[23]),     # Rush TDs
+                    'rush_a_g': safe_float(row.iloc[24]),  # Rush A/G
+                    'rush_y_g': safe_float(row.iloc[25]),  # Rush Y/G
+                    
+                    # Total Stats (Cols 27-28)
+                    'total_td': safe_int(row.iloc[26]),    # Total TDs
+                    'pts': safe_int(row.iloc[27]),         # Points
+                    
+                    # Fumble Stats (Cols 29-34)
+                    'fmb': safe_int(row.iloc[28]),         # Fumbles
+                    'fl': safe_int(row.iloc[29]),          # Fumbles Lost
+                    'ff': safe_int(row.iloc[30]),          # Fumbles Forced
+                    'fr': safe_int(row.iloc[31]),          # Fumbles Recovered
+                    'fr_yds': safe_int(row.iloc[32]),      # Fumble Recovery Yards
+                    'fr_td': safe_int(row.iloc[33]),       # Fumble Recovery TDs
+                }
+                
+                # Validate required fields
+                if split_data['split'] is None or split_data['value'] is None:
+                    logger.warning(f"Skipping row {index}: missing split or value")
+                    continue
+                
+                parsed_splits.append(split_data)
+                logger.debug(f"Parsed split: {split_data['split']}/{split_data['value']}")
+                
+            except Exception as e:
+                logger.error(f"Error parsing row {index}: {e}")
+                continue
+        
+        logger.info(f"Successfully parsed {len(parsed_splits)} splits from CSV")
+        return parsed_splits
+        
+    except Exception as e:
+        logger.error(f"Error parsing CSV content: {e}")
+        return []
+
+def validate_qb_splits_data(splits_data: List[Dict[str, Any]]) -> List[str]:
+    """
+    Validate QB splits data for consistency and completeness.
+    
+    Args:
+        splits_data: List of parsed split dictionaries
+        
+    Returns:
+        List of validation error messages
+    """
+    errors = []
+    
+    if not splits_data:
+        errors.append("No splits data provided")
+        return errors
+    
+    # Check for required split categories
+    required_splits = {
+        'Place', 'Result', 'Final Margin', 'Month', 'Game Number', 
+        'Day', 'Time', 'Conference', 'Division', 'Opponent', 'Stadium', 'QB Start'
+    }
+    
+    found_splits = set()
+    for split in splits_data:
+        if split.get('split'):
+            found_splits.add(split['split'])
+    
+    missing_splits = required_splits - found_splits
+    if missing_splits:
+        errors.append(f"Missing required split categories: {missing_splits}")
+    
+    # Validate data consistency for each split type
+    for split_type in found_splits:
+        type_splits = [s for s in splits_data if s.get('split') == split_type]
+        
+        # Check that games sum correctly
+        total_games = sum(s.get('g', 0) or 0 for s in type_splits)
+        if total_games > 0:
+            # Find the "League" or total row for this split type
+            league_row = next((s for s in type_splits if s.get('value') in ['NFL', 'League']), None)
+            if league_row and league_row.get('g'):
+                league_games = league_row.get('g', 0)
+                if total_games != league_games:
+                    errors.append(f"Games don't sum correctly for {split_type}: expected {league_games}, got {total_games}")
+    
+    # Validate individual split values
+    for split in splits_data:
+        # Check for negative values where they shouldn't be
+        if split.get('g', 0) < 0:
+            errors.append(f"Negative games value: {split.get('g')} for {split.get('split')}/{split.get('value')}")
+        
+        if split.get('w', 0) < 0 or split.get('l', 0) < 0 or split.get('t', 0) < 0:
+            errors.append(f"Negative W/L/T values for {split.get('split')}/{split.get('value')}")
+        
+        # Check that W + L + T = G
+        g = split.get('g', 0) or 0
+        w = split.get('w', 0) or 0
+        l = split.get('l', 0) or 0
+        t = split.get('t', 0) or 0
+        
+        if g > 0 and (w + l + t) != g:
+            errors.append(f"W+L+T != G for {split.get('split')}/{split.get('value')}: {w}+{l}+{t} != {g}")
+    
+    return errors
+
+def convert_splits_to_qb_splits_type1(splits_data: List[Dict[str, Any]], 
+                                     pfr_id: str, 
+                                     player_name: str, 
+                                     season: int) -> List[Any]:
+    """
+    Convert splits data to QBSplitsType1 objects
+    
+    Args:
+        splits_data: List of splits data dictionaries
+        pfr_id: Player's PFR ID
+        player_name: Player's name
+        season: Season year
+        
+    Returns:
+        List of QBSplitsType1 objects
+    """
+    from models.qb_models import QBSplitsType1
+    
+    qb_splits = []
+    
+    for split_data in splits_data:
+        try:
+            # Extract split type and value
+            split = split_data.get('split', '')
+            value = split_data.get('value', '')
+            
+            # Create QBSplitsType1 object
+            qb_split = QBSplitsType1(
+                pfr_id=pfr_id,
+                player_name=player_name,
+                season=season,
+                split=split,
+                value=value,
+                g=safe_int(split_data.get('g')),
+                w=safe_int(split_data.get('w')),
+                l=safe_int(split_data.get('l')),
+                t=safe_int(split_data.get('t')),
+                cmp=safe_int(split_data.get('cmp')),
+                att=safe_int(split_data.get('att')),
+                inc=safe_int(split_data.get('inc')),
+                cmp_pct=safe_percentage(split_data.get('cmp_pct')),
+                yds=safe_int(split_data.get('yds')),
+                td=safe_int(split_data.get('td')),
+                int=safe_int(split_data.get('int')),
+                rate=safe_float(split_data.get('rate')),
+                sk=safe_int(split_data.get('sk')),
+                sk_yds=safe_int(split_data.get('sk_yds')),
+                y_a=safe_float(split_data.get('y_a')),
+                ay_a=safe_float(split_data.get('ay_a')),
+                a_g=safe_float(split_data.get('a_g')),
+                y_g=safe_float(split_data.get('y_g')),
+                rush_att=safe_int(split_data.get('rush_att')),
+                rush_yds=safe_int(split_data.get('rush_yds')),
+                rush_y_a=safe_float(split_data.get('rush_y_a')),
+                rush_td=safe_int(split_data.get('rush_td')),
+                rush_a_g=safe_float(split_data.get('rush_a_g')),
+                rush_y_g=safe_float(split_data.get('rush_y_g')),
+                total_td=safe_int(split_data.get('total_td')),
+                pts=safe_int(split_data.get('pts')),
+                fmb=safe_int(split_data.get('fmb')),
+                fl=safe_int(split_data.get('fl')),
+                ff=safe_int(split_data.get('ff')),
+                fr=safe_int(split_data.get('fr')),
+                fr_yds=safe_int(split_data.get('fr_yds')),
+                fr_td=safe_int(split_data.get('fr_td')),
+                scraped_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+            
+            qb_splits.append(qb_split)
+            
+        except Exception as e:
+            logger.error(f"Error converting split data for {player_name}: {e}")
+            continue
+    
+    return qb_splits 

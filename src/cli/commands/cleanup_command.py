@@ -4,9 +4,12 @@ Cleanup Command for NFL QB Data Scraping System CLI
 Handles cleaning up data in the database.
 """
 
+import logging
+import argparse
+from typing import Dict, Any, List
 from argparse import ArgumentParser, Namespace
 
-from ..base_command import BaseCommand
+from src.cli.base_command import BaseCommand
 
 class CleanupCommand(BaseCommand):
     """Command to clean up database data"""

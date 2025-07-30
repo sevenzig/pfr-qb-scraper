@@ -11,13 +11,11 @@ import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
+from argparse import ArgumentParser, Namespace
 
-# Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-from cli.base_command import BaseCommand
-from operations.quality_gates import ProductionQualityGates, QualityReport
-from operations.performance_monitor import PerformanceMonitor, PerformanceReport
+from src.cli.base_command import BaseCommand
+from src.operations.quality_gates import ProductionQualityGates, QualityReport
+from src.operations.performance_monitor import PerformanceMonitor, PerformanceReport
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +24,7 @@ class QualityValidateCommand(BaseCommand):
     """Validate system quality and production readiness"""
     
     def __init__(self):
-        pass
+        super().__init__()
 
     @property
     def name(self) -> str:
@@ -36,10 +34,10 @@ class QualityValidateCommand(BaseCommand):
     def description(self) -> str:
         return "Run comprehensive quality validation checks including test coverage, type safety, security, and performance"
 
-    def run(self, args) -> int:
+    def run(self, args: Namespace) -> int:
         return self.execute(args)
     
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: ArgumentParser) -> None:
         """Add command-specific arguments"""
         parser.add_argument(
             '--type', '-t',
@@ -63,7 +61,7 @@ class QualityValidateCommand(BaseCommand):
             help='Stop on first validation failure'
         )
     
-    def execute(self, args) -> int:
+    def execute(self, args: Namespace) -> int:
         """Execute the validation command"""
         try:
             logger.info(f"Starting {args.type} validation")
@@ -147,13 +145,17 @@ class MonitorCommand(BaseCommand):
     """Monitor system performance and health"""
     
     def __init__(self):
-        super().__init__(
-            name="monitor",
-            help_text="Monitor system performance and health",
-            description="Track performance metrics, generate reports, and manage alerts"
-        )
+        super().__init__()
+
+    @property
+    def name(self) -> str:
+        return "monitor"
+
+    @property
+    def description(self) -> str:
+        return "Monitor system performance and health - track performance metrics, generate reports, and manage alerts"
     
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: ArgumentParser) -> None:
         """Add command-specific arguments"""
         parser.add_argument(
             '--action', '-a',
@@ -177,8 +179,8 @@ class MonitorCommand(BaseCommand):
             choices=['low', 'medium', 'high', 'critical'],
             help='Filter alerts by severity level'
         )
-    
-    def execute(self, args) -> int:
+
+    def run(self, args: Namespace) -> int:
         """Execute the monitoring command"""
         try:
             monitor = PerformanceMonitor()
@@ -385,13 +387,17 @@ class OptimizeCommand(BaseCommand):
     """Optimize system performance"""
     
     def __init__(self):
-        super().__init__(
-            name="optimize",
-            help_text="Optimize system performance",
-            description="Run performance optimizations and provide recommendations"
-        )
+        super().__init__()
+
+    @property
+    def name(self) -> str:
+        return "optimize"
+
+    @property
+    def description(self) -> str:
+        return "Optimize system performance - run performance optimizations and provide recommendations"
     
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: ArgumentParser) -> None:
         """Add command-specific arguments"""
         parser.add_argument(
             '--type', '-t',
@@ -409,8 +415,8 @@ class OptimizeCommand(BaseCommand):
             action='store_true',
             help='Verbose output with detailed analysis'
         )
-    
-    def execute(self, args) -> int:
+
+    def run(self, args: Namespace) -> int:
         """Execute the optimization command"""
         try:
             logger.info(f"Starting {args.type} optimization")

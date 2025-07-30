@@ -15,8 +15,8 @@ from psycopg2.pool import SimpleConnectionPool
 from psycopg2.extras import RealDictCursor, execute_batch
 from psycopg2.extensions import connection
 
-from models.qb_models import QBBasicStats, QBAdvancedStats, QBSplitStats, QBSplitsType2, Player, Team, ScrapingLog
-from config.config import config
+from src.models.qb_models import QBBasicStats, QBAdvancedStats, QBSplitStats, QBSplitsType2, Player, Team, ScrapingLog
+from src.config.config import config
 
 logger = logging.getLogger(__name__)
 

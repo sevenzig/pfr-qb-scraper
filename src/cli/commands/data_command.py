@@ -7,16 +7,16 @@ Handles data validation, import/export, quality checks, and backups
 from argparse import ArgumentParser, Namespace
 from typing import List
 
-from ..base_command import BaseCommand
-from .populate_command import PopulateCommand
-from .cleanup_command import CleanupCommand
+from src.cli.base_command import BaseCommand
+from src.cli.commands.populate_command import PopulateCommand
+from src.cli.commands.cleanup_command import CleanupCommand
 
 # Use try/except for optional imports
 try:
     from ...operations.data_manager import DataManager
 except ImportError:
     try:
-        from operations.data_manager import DataManager
+        from src.operations.data_manager import DataManager
     except ImportError:
         DataManager = None
 
@@ -42,83 +42,55 @@ class DataCommand(BaseCommand):
     def description(self) -> str:
         return "Data management: validate, import/export, quality checks"
 
-    def add_arguments(self, parser: ArgumentParser):
-        """Add command-specific arguments"""
-        subparsers = parser.add_subparsers(dest='data_subcommand', help='Data operation subcommands')
-        
-        # Validate subcommand
-        validate_parser = subparsers.add_parser('validate', help='Validate data integrity')
-        validate_parser.add_argument('--season', type=int, help='Specific season to validate')
-        validate_parser.add_argument('--detailed', action='store_true', help='Show detailed validation results')
+    def add_arguments(self, parser: ArgumentParser) -> None:
+        """Add data-specific arguments"""
+        subparsers = parser.add_subparsers(dest='data_subcommand', help='Data subcommands')
         
         # Export subcommand
-        export_parser = subparsers.add_parser('export', help='Export data to a file')
-        export_parser.add_argument('--format', choices=['json', 'csv', 'sqlite'], 
-                                   default='json', help='Export format (default: json)')
-        export_parser.add_argument('--season', type=int, help='Specific season to export')
-        export_parser.add_argument('--output-file', type=str, help='Output file path')
+        export_parser = subparsers.add_parser('export', help='Export data from database')
+        export_parser.add_argument('--season', type=int, help='Season to export')
+        export_parser.add_argument('--format', choices=['json', 'csv'], default='json', help='Export format')
+        export_parser.add_argument('--output', help='Output file path')
         
         # Import subcommand
-        import_parser = subparsers.add_parser('import', help='Import data from a file')
-        import_parser.add_argument('--file', type=str, required=True, help='File to import')
-        import_parser.add_argument('--format', choices=['json', 'csv', 'sqlite'], 
-                                   help='Import format (auto-detected if not specified)')
-        import_parser.add_argument('--validate', action='store_true', help='Validate imported data')
+        import_parser = subparsers.add_parser('import', help='Import data to database')
+        import_parser.add_argument('--file', required=True, help='File to import')
+        import_parser.add_argument('--format', choices=['json', 'csv'], default='json', help='Import format')
         
-        # Populate subcommand
-        populate_parser = subparsers.add_parser('populate', help='Populate database with initial data')
-        populate_command = PopulateCommand()
-        populate_command.add_arguments(populate_parser)
-
-        # Cleanup subcommand
-        cleanup_parser = subparsers.add_parser('cleanup', help='Clean up data in the database')
-        cleanup_command = CleanupCommand()
-        cleanup_command.add_arguments(cleanup_parser)
-
         # Quality subcommand
-        quality_parser = subparsers.add_parser('quality', help='Run data quality checks')
-        quality_parser.add_argument('--season', type=int, help='Specific season for quality checks')
-        quality_parser.add_argument('--report-file', type=str, help='Save quality report to a file')
-        
-        # Backup subcommand
-        backup_parser = subparsers.add_parser('backup', help='Create or restore a database backup')
-        backup_parser.add_argument('action', choices=['create', 'restore'], help='Backup action')
-        backup_parser.add_argument('--file', type=str, help='Backup file path')
+        quality_parser = subparsers.add_parser('quality', help='Analyze data quality')
+        quality_parser.add_argument('--season', type=int, help='Season to analyze')
+        quality_parser.add_argument('--detailed', action='store_true', help='Show detailed analysis')
         
         # Summary subcommand
         summary_parser = subparsers.add_parser('summary', help='Show data summary')
-        summary_parser.add_argument('--season', type=int, help='Specific season for summary')
+        summary_parser.add_argument('--season', type=int, help='Season to summarize')
+        
+        # Clear subcommand
+        clear_parser = subparsers.add_parser('clear', help='Clear all data from database')
+        clear_parser.add_argument('--confirm', action='store_true', help='Confirm clearing all data')
+        clear_parser.add_argument('--season', type=int, help='Clear data for specific season only')
+        clear_parser.add_argument('--tables', nargs='+', help='Specific tables to clear')
 
     def run(self, args: Namespace) -> int:
         """Execute the data command"""
         if not args.data_subcommand:
-            self.logger.error("No data subcommand specified. Use --help for available options.")
+            self.print_error("No data subcommand specified. Use 'export', 'import', 'quality', 'summary', or 'clear'.")
             return 1
+
+        if args.data_subcommand == 'export':
+            return self._handle_export(args)
+        elif args.data_subcommand == 'import':
+            return self._handle_import(args)
+        elif args.data_subcommand == 'quality':
+            return self._handle_quality(args)
+        elif args.data_subcommand == 'summary':
+            return self._handle_summary(args)
+        elif args.data_subcommand == 'clear':
+            return self._handle_clear(args)
         
-        try:
-            if args.data_subcommand == 'validate':
-                return self._handle_validate(args)
-            elif args.data_subcommand == 'export':
-                return self._handle_export(args)
-            elif args.data_subcommand == 'import':
-                return self._handle_import(args)
-            elif args.data_subcommand == 'populate':
-                return self._handle_populate(args)
-            elif args.data_subcommand == 'cleanup':
-                return self._handle_cleanup(args)
-            elif args.data_subcommand == 'quality':
-                return self._handle_quality(args)
-            elif args.data_subcommand == 'backup':
-                return self._handle_backup(args)
-            elif args.data_subcommand == 'summary':
-                return self._handle_summary(args)
-            else:
-                self.logger.error(f"Unknown data subcommand: {args.data_subcommand}")
-                return 1
-                
-        except Exception as e:
-            self.logger.error(f"Data command failed: {e}")
-            return 1
+        self.print_error(f"Unknown data subcommand: {args.data_subcommand}")
+        return 1
     
     def _handle_populate(self, args: Namespace) -> int:
         """Handle the populate subcommand"""
@@ -173,7 +145,7 @@ class DataCommand(BaseCommand):
             output_file = self.data_manager.export_data(
                 format=args.format,
                 season=args.season,
-                output_file=args.output_file
+                output_file=args.output
             )
             self.print_success(f"Data exported successfully to: {output_file}")
             return 0
@@ -279,4 +251,117 @@ class DataCommand(BaseCommand):
             else:
                 self.print_info(f"{key.replace('_', ' ').title()}: {value}")
         
+        return 0 
+
+    def _handle_clear(self, args: Namespace) -> int:
+        """Handle clearing data from database"""
+        try:
+            db_manager = self.get_database_manager()
+            
+            if not args.confirm:
+                self.print_warning("⚠️  WARNING: This will delete data from the database!")
+                self.print_info("Tables will be preserved, but records will be removed.")
+                self.print_info("This operation cannot be undone.")
+                self.print_info("Use --confirm to proceed.")
+                return 1
+            
+            if args.season:
+                # Clear data for specific season
+                self.print_info(f"Clearing data for season {args.season}...")
+                return self._clear_season_data(db_manager, args.season)
+            elif args.tables:
+                # Clear specific tables
+                self.print_info(f"Clearing tables: {', '.join(args.tables)}...")
+                return self._clear_specific_tables(db_manager, args.tables)
+            else:
+                # Clear all data
+                self.print_info("Clearing all data from database...")
+                return self._clear_all_data(db_manager)
+                
+        except Exception as e:
+            self.handle_error(e, "Failed to clear data")
+            return 1
+    
+    def _clear_all_data(self, db_manager) -> int:
+        """Clear all data from database"""
+        # Tables to clear (in order to respect foreign key constraints)
+        tables_to_clear = [
+            'scraping_logs',
+            'qb_splits_advanced', 
+            'qb_splits',
+            'qb_passing_stats',
+            'players'
+        ]
+        
+        total_deleted = 0
+        
+        for table in tables_to_clear:
+            try:
+                # Get count before deletion
+                count_result = db_manager.query(f"SELECT COUNT(*) as count FROM {table}")
+                count_before = count_result[0]['count'] if count_result else 0
+                
+                # Delete all records
+                deleted_count = db_manager.execute(f"DELETE FROM {table}")
+                
+                self.print_info(f"✅ Deleted {deleted_count} records from {table} (was {count_before})")
+                total_deleted += deleted_count
+                
+            except Exception as e:
+                self.print_error(f"❌ Error clearing table {table}: {e}")
+                continue
+        
+        self.print_success(f"✅ Database clearing completed! Total records deleted: {total_deleted}")
+        return 0
+    
+    def _clear_season_data(self, db_manager, season: int) -> int:
+        """Clear data for specific season"""
+        tables_to_clear = [
+            'qb_splits_advanced', 
+            'qb_splits',
+            'qb_passing_stats'
+        ]
+        
+        total_deleted = 0
+        
+        for table in tables_to_clear:
+            try:
+                # Get count before deletion
+                count_result = db_manager.query(f"SELECT COUNT(*) as count FROM {table} WHERE season = %s", (season,))
+                count_before = count_result[0]['count'] if count_result else 0
+                
+                # Delete records for specific season
+                deleted_count = db_manager.execute(f"DELETE FROM {table} WHERE season = %s", (season,))
+                
+                self.print_info(f"✅ Deleted {deleted_count} records from {table} for season {season} (was {count_before})")
+                total_deleted += deleted_count
+                
+            except Exception as e:
+                self.print_error(f"❌ Error clearing table {table}: {e}")
+                continue
+        
+        self.print_success(f"✅ Season {season} data clearing completed! Total records deleted: {total_deleted}")
+        return 0
+    
+    def _clear_specific_tables(self, db_manager, tables: list) -> int:
+        """Clear specific tables"""
+        total_deleted = 0
+        
+        for table in tables:
+            try:
+                # Get count before deletion
+                count_result = db_manager.query(f"SELECT COUNT(*) as count FROM {table}")
+                count_before = count_result[0]['count'] if count_result else 0
+                
+                # Delete all records
+                deleted_count = db_manager.execute(f"DELETE FROM {table}")
+                
+                self.print_info(f"✅ Deleted {deleted_count} records from {table} (was {count_before})")
+                total_deleted += deleted_count
+                
+            except Exception as e:
+                self.print_error(f"❌ Error clearing table {table}: {e}")
+                continue
+        
+        self.print_success(f"✅ Table clearing completed! Total records deleted: {total_deleted}")
         return 0 

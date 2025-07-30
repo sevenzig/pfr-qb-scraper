@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# C extensions
+*.so
+
+# Virtual environments
+.env
+.venv
+venv/
+env/
+
+# IDE configuration
+.vscode/
+.idea/
+.cursor/
+
+# Project-specific ignores
+/backups/
+/docs/
+/logs/
+log.txt
+/setup/*.csv
+/tests/*.json
+/test_export.json
+/test_validation_report.json
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/ 

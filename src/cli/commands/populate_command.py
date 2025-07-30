@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Populate Command for NFL QB Data Scraping System CLI
-Handles populating the database with initial data.
+Populate Command for NFL QB Data Scraping
+CLI command for populating database with sample data
 """
 
+import logging
+import argparse
+from typing import Dict, Any, List
 from argparse import ArgumentParser, Namespace
-from typing import List
 
-from ..base_command import BaseCommand
+from src.cli.base_command import BaseCommand
 from src.database.db_manager import DatabaseManager
 
 class PopulateCommand(BaseCommand):

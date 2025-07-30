@@ -1,0 +1,13 @@
+id,pfr_id,player_name,season,split,value,cmp,att,inc,cmp_pct,yds,td,first_downs,int,rate,sk,sk_yds,y_a,ay_a,rush_att,rush_yds,rush_y_a,rush_td,rush_first_downs,scraped_at,updated_at
+17414,burrjo01,Joe Burrow,2024,advanced_splits,Down,,,,,,,,,,,,,,18,51,,0,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00
+17415,burrjo01,Joe Burrow,2024,advanced_splits,,,,,,,,,,,,,,,0,0,,0,,2025-07-19 21:59:44.328315+00,2025-07-20 02:01:08.358084+00
+17418,burrjo01,Joe Burrow,2024,advanced_splits,Yards To Go,,,,,,,,,,,,,,8,15,,1,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00
+17422,burrjo01,Joe Burrow,2024,advanced_splits,Down & Yards to Go,,,,,,,,,,,,,,18,51,,0,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00
+17436,burrjo01,Joe Burrow,2024,advanced_splits,Field Position,,,,,,,,,,,,,,3,-2,,0,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00
+17442,burrjo01,Joe Burrow,2024,advanced_splits,Score Differential,,,,,,,,,,,,,,16,32,,0,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00
+17445,burrjo01,Joe Burrow,2024,advanced_splits,Quarter,,,,,,,,,,,,,,5,65,,1,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00
+17452,burrjo01,Joe Burrow,2024,advanced_splits,Game Situation,,,,,,,,,,,,,,7,-7,,0,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00
+17458,burrjo01,Joe Burrow,2024,advanced_splits,Snap Type & Huddle,,,,,,,,,,,,,,42,201,,2,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00
+17462,burrjo01,Joe Burrow,2024,advanced_splits,Play Action,,,,,,,,,,,,,,0,0,,0,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00
+17464,burrjo01,Joe Burrow,2024,advanced_splits,Run/Pass Option,,,,,,,,,,,,,,3,19,,0,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00
+17466,burrjo01,Joe Burrow,2024,advanced_splits,Time in Pocket,,,,,,,,,,,,,,0,0,,0,,2025-07-19 21:59:44.328315+00,2025-07-19 21:59:44.328315+00

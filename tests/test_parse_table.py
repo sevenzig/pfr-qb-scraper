@@ -46,14 +46,14 @@ def test_parse_table():
     else:
         print("✗ Failed to parse table with 'passing' ID")
     
-    # Test parsing with 'stats_passing' table ID
-    print("\nTesting with 'stats_passing' table ID...")
-    df2 = scraper.parse_table_data(soup, 'stats_passing')
+    # Test parsing with 'passing' table ID
+    print("\nTesting with 'passing' table ID...")
+    df2 = scraper.parse_table_data(soup, 'passing')
     
     if df2 is not None:
         print(f"✓ Successfully parsed table with {len(df2)} rows")
     else:
-        print("✗ Failed to parse table with 'stats_passing' ID")
+        print("✗ Failed to parse table with 'passing' ID")
 
 if __name__ == "__main__":
     test_parse_table() 

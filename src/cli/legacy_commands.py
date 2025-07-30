@@ -11,11 +11,8 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-# Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-from cli.base_command import BaseCommand
-from operations.legacy_deprecation import LegacyDeprecationManager
+from src.cli.base_command import BaseCommand
+from src.operations.legacy_deprecation import LegacyDeprecationManager
 
 logger = logging.getLogger(__name__)
 

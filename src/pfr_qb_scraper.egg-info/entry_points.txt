@@ -1,0 +1,2 @@
+[console_scripts]
+pfr-scraper = src.cli.cli_main:main

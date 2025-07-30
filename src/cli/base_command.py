@@ -1,23 +1,18 @@
 #!/usr/bin/env python3
 """
-Base command class for NFL QB Data Scraping System CLI
-Provides common interface and functionality for all CLI commands
+Base Command for NFL QB Data Scraping CLI
+Base class for all CLI commands with common functionality
 """
 
-import sys
 import logging
+import argparse
 from abc import ABC, abstractmethod
-from argparse import ArgumentParser, Namespace
 from typing import Dict, Any, Optional, List
+from datetime import datetime
+from argparse import ArgumentParser, Namespace
 
-# Use absolute imports to avoid relative import issues
-try:
-    from config.config import config
-    from database.db_manager import DatabaseManager
-except ImportError:
-    # Fallback for testing
-    config = None
-    DatabaseManager = None
+from src.config.config import config  # avoid collision with external "config" package
+from src.database.db_manager import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +22,7 @@ class BaseCommand(ABC):
     
     def __init__(self):
         """Initialize base command"""
-        self.db_manager: Optional[DatabaseManager] = None
+        self.db_manager: Optional[Any] = None
         self.config = config
         self.logger = logging.getLogger(self.__class__.__name__)
         
@@ -106,22 +101,23 @@ class BaseCommand(ABC):
             self.logger.addHandler(file_handler)
             self.logger.addHandler(console_handler)
     
-    def get_database_manager(self) -> DatabaseManager:
+    def get_database_manager(self) -> Any:
         """Get database manager instance (lazy initialization)"""
         if self.db_manager is None:
             if DatabaseManager is not None:
                 self.db_manager = DatabaseManager()
             else:
                 # Return mock for testing
-                self.db_manager = type('obj', (object,), {
+                mock_db_manager = type('MockDatabaseManager', (object,), {
                     'health_check': lambda: {'connection_ok': True, 'tables_exist': True, 'data_accessible': True},
                     'validate_data_integrity': lambda: {},
                     'get_database_stats': lambda: {'qb_stats_count': 0, 'qb_splits_count': 0},
                     'cleanup_old_data': lambda days: 0
                 })()
+                self.db_manager = mock_db_manager
         return self.db_manager
     
-    def handle_error(self, error: Exception, message: str = None) -> int:
+    def handle_error(self, error: Exception, message: Optional[str] = None) -> int:
         """
         Handle command errors with consistent logging and exit codes
         

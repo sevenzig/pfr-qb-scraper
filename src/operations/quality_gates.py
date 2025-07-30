@@ -16,11 +16,8 @@ from pathlib import Path
 import json
 import importlib.util
 
-# Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
 try:
-    from config.config import config
+    from src.config.config import config
 except ImportError:
     config = None
 

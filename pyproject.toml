@@ -1,5 +1,5 @@
 [project]
-name = "nfl-qb-scraper"
+name = "pfr-qb-scraper"
 version = "1.0.0"
 description = "NFL Quarterback Data Scraping and Database System"
 authors = [
@@ -27,7 +27,7 @@ dev = [
 ]
 
 [project.scripts]
-nfl-qb-scraper = "src.cli.cli_main:main"
+pfr-qb-scraper = "src.cli.cli_main:main"
 
 [build-system]
 requires = ["hatchling"]

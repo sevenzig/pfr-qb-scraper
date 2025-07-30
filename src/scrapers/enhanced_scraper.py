@@ -1,93 +1,85 @@
 #!/usr/bin/env python3
 """
-Enhanced Pro Football Reference scraper with automatic split discovery
-Comprehensive QB data extraction with robust error handling and rate limiting
+Enhanced PFR Scraper for NFL QB Data
+Comprehensive scraper with integrated splits extraction and advanced features
 """
 
-import time
-import requests
-import pandas as pd
-from bs4 import BeautifulSoup
 import logging
-from urllib.parse import urljoin, urlparse
-from typing import Dict, List, Optional, Tuple, Any, Set
-from datetime import datetime
+import time
 import random
+from datetime import datetime
+from typing import List, Optional, Dict, Any, Tuple
+from dataclasses import dataclass, field
+from collections import defaultdict
+from urllib.parse import urljoin
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
-from dataclasses import dataclass
 
-from models.qb_models import Player, QBBasicStats, QBAdvancedStats, QBSplitStats, QBSplitsType1, Team, ScrapingLog
-from utils.data_utils import (
-    safe_int, safe_float, safe_percentage, clean_player_name, 
-    generate_player_id, generate_session_id, calculate_processing_time,
-    normalize_pfr_team_code
+from bs4 import BeautifulSoup
+import pandas as pd
+import requests
+
+from src.models.qb_models import (
+    QBBasicStats, QBSplitsType1, QBSplitsType2, QBPassingStats,
+    Player, Team, ScrapingLog, QBSplitStats
 )
-from config.config import config, SplitTypes, SplitCategories
+from src.utils.data_utils import (
+    safe_int, safe_float, safe_percentage, clean_player_name,
+    extract_pfr_id, build_splits_url, generate_session_id,
+    calculate_processing_time, normalize_pfr_team_code
+)
+from src.config.config import config, SplitTypes, SplitCategories
+from src.core.selenium_manager import SeleniumManager, SeleniumConfig
+from src.core.splits_manager import SplitsManager
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class ScrapingMetrics:
-    """Metrics for tracking scraping performance"""
+    """Metrics tracking for scraping operations"""
+    start_time: datetime
     total_requests: int = 0
     successful_requests: int = 0
     failed_requests: int = 0
+    errors: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
     rate_limit_violations: int = 0
-    start_time: Optional[datetime] = None
-    errors: List[str] = None
-    warnings: List[str] = None
-    
-    def __post_init__(self):
-        if self.errors is None:
-            self.errors = []
-        if self.warnings is None:
-            self.warnings = []
     
     def add_error(self, error: str):
-        """Add error message"""
+        """Add error to metrics"""
         self.errors.append(error)
-        logger.error(error)
+        self.failed_requests += 1
     
     def add_warning(self, warning: str):
-        """Add warning message"""
+        """Add warning to metrics"""
         self.warnings.append(warning)
-        logger.warning(warning)
-    
-    def get_success_rate(self) -> float:
-        """Calculate success rate"""
-        if self.total_requests == 0:
-            return 0.0
-        return (self.successful_requests / self.total_requests) * 100
-    
-    def get_requests_per_minute(self) -> float:
-        """Calculate requests per minute"""
-        if not self.start_time:
-            return 0.0
-        elapsed = (datetime.now() - self.start_time).total_seconds() / 60
-        if elapsed == 0:
-            return 0.0
-        return self.total_requests / elapsed
+
 
 class EnhancedPFRScraper:
     """Enhanced Pro Football Reference scraper with automatic split discovery"""
     
-    def __init__(self, rate_limit_delay: float = None):
+    def __init__(self, rate_limit_delay: float = None, splits_manager: Optional['SplitsManager'] = None):
         self.base_url = "https://www.pro-football-reference.com"
         self.rate_limit_delay = rate_limit_delay or config.get_rate_limit_delay()
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': config.scraping.user_agent
-        })
         
-        # Rate limiting lock
-        self.rate_limit_lock = threading.Lock()
-        self.last_request_time = 0
+        # Use the Selenium manager for all HTTP requests
+        selenium_config = SeleniumConfig(
+            headless=True,
+            human_behavior_delay=(self.rate_limit_delay, self.rate_limit_delay + 3.0)
+        )
+        self.selenium_manager = SeleniumManager(selenium_config)
+        
+        # Use injected SplitsManager if provided, otherwise create default one
+        if splits_manager is not None:
+            self.splits_manager = splits_manager
+            logger.info("Using injected SplitsManager in EnhancedPFRScraper")
+        else:
+            # Initialize the dedicated SplitsManager with the Selenium manager
+            self.splits_manager = SplitsManager(self.selenium_manager)
+            logger.info("Created new SplitsManager in EnhancedPFRScraper")
         
         # Metrics tracking
-        self.metrics = ScrapingMetrics()
-        self.metrics.start_time = datetime.now()
+        self.metrics = ScrapingMetrics(start_time=datetime.now())
         
         # Known split patterns for automatic discovery - updated based on actual PFR structure
         self.split_patterns = {
@@ -103,82 +95,43 @@ class EnhancedPFRScraper:
             'run_pass_option': [r'run.*pass.*option', r'rpo', r'non-rpo'],
             'time_in_pocket': [r'time.*pocket', r'2\.5.*seconds', r'2\.5\+.*seconds']
         }
+        
+        logger.info(f"Initialized EnhancedPFRScraper with rate limit delay: {self.rate_limit_delay}s")
     
-    def respect_rate_limit(self):
-        """Implement rate limiting with jitter"""
-        with self.rate_limit_lock:
-            current_time = time.time()
-            time_since_last = current_time - self.last_request_time
-            
-            # Add jitter to avoid thundering herd
-            jitter = random.uniform(-config.scraping.jitter_range, config.scraping.jitter_range)
-            required_delay = max(2.0, self.rate_limit_delay + jitter)
-            
-            if time_since_last < required_delay:
-                sleep_time = required_delay - time_since_last
-                time.sleep(sleep_time)
-            
-            self.last_request_time = time.time()
-    
-    def make_request_with_retry(self, url: str, max_retries: int = None) -> Optional[requests.Response]:
+    def make_request_with_retry(self, url: str, max_retries: int = None) -> Optional[str]:
         """
-        Make HTTP request with comprehensive error handling and retry logic
+        Make HTTP request with retry logic and rate limiting using Selenium
         
         Args:
             url: URL to request
-            max_retries: Maximum number of retry attempts
+            max_retries: Maximum number of retries (defaults to config value)
             
         Returns:
-            Response object or None if all retries failed
+            Page source HTML or None if request failed
         """
         max_retries = max_retries or config.scraping.max_retries
-        self.metrics.total_requests += 1
         
-        for attempt in range(max_retries):
+        for attempt in range(max_retries + 1):
             try:
-                self.respect_rate_limit()
+                self.metrics.total_requests += 1
                 
-                response = self.session.get(
-                    url, 
-                    timeout=config.scraping.timeout,
-                    headers={'User-Agent': config.scraping.user_agent}
-                )
+                # Use the Selenium manager for consistent rate limiting
+                result = self.selenium_manager.get_page(url, enable_js=False)
                 
-                # Check for rate limiting
-                if response.status_code == 429:
-                    self.metrics.rate_limit_violations += 1
-                    wait_time = 60 * (attempt + 1)  # Exponential backoff for rate limits
-                    logger.warning(f"Rate limited, waiting {wait_time} seconds (attempt {attempt + 1})")
-                    time.sleep(wait_time)
-                    continue
-                
-                response.raise_for_status()
-                self.metrics.successful_requests += 1
-                return response
-                
-            except requests.exceptions.Timeout:
-                logger.warning(f"Request timeout (attempt {attempt + 1}/{max_retries}): {url}")
-                if attempt == max_retries - 1:
-                    self.metrics.add_error(f"Request timeout after {max_retries} attempts: {url}")
-                    self.metrics.failed_requests += 1
-                    return None
-                time.sleep(5 * (attempt + 1))
-                
-            except requests.exceptions.ConnectionError:
-                logger.warning(f"Connection error (attempt {attempt + 1}/{max_retries}): {url}")
-                if attempt == max_retries - 1:
-                    self.metrics.add_error(f"Connection error after {max_retries} attempts: {url}")
-                    self.metrics.failed_requests += 1
-                    return None
-                time.sleep(10 * (attempt + 1))
-                
-            except requests.exceptions.RequestException as e:
-                logger.warning(f"Request failed (attempt {attempt + 1}/{max_retries}): {e}")
-                if attempt == max_retries - 1:
-                    self.metrics.add_error(f"Request failed after {max_retries} attempts: {url} - {e}")
-                    self.metrics.failed_requests += 1
-                    return None
-                time.sleep(5 * (attempt + 1))
+                if result['success']:
+                    self.metrics.successful_requests += 1
+                    return result['content']
+                else:
+                    self.metrics.add_error(f"Failed to load page for {url}: {result['error']}")
+                    
+            except Exception as e:
+                self.metrics.add_error(f"Request failed for {url}: {str(e)}")
+            
+            # Wait before retry (exponential backoff)
+            if attempt < max_retries:
+                wait_time = (2 ** attempt) * self.rate_limit_delay
+                logger.debug(f"Retrying {url} in {wait_time:.2f}s (attempt {attempt + 1}/{max_retries + 1})")
+                time.sleep(wait_time)
         
         return None
     
@@ -196,21 +149,21 @@ class EnhancedPFRScraper:
         try:
             # Find the table by ID
             table = soup.find('table', {'id': table_id})
-            if not table:
+            if not table or not isinstance(table, Tag):
                 logger.error(f"Table with ID '{table_id}' not found")
                 return None
             
             # Extract headers
             headers = []
             header_row = table.find('thead')
-            if header_row:
+            if header_row and isinstance(header_row, Tag):
                 # Get headers from thead
                 th_elements = header_row.find_all('th')
                 headers = [th.get_text(strip=True) for th in th_elements]
             else:
                 # Try to get headers from first row
                 first_row = table.find('tr')
-                if first_row:
+                if first_row and isinstance(first_row, Tag):
                     th_elements = first_row.find_all('th')
                     headers = [th.get_text(strip=True) for th in th_elements]
             
@@ -390,11 +343,11 @@ class EnhancedPFRScraper:
         """
         logger.info(f"Discovering splits for player page: {player_url}")
         
-        response = self.make_request_with_retry(player_url)
-        if not response:
+        page_source = self.make_request_with_retry(player_url)
+        if not page_source:
             return {}
         
-        soup = BeautifulSoup(response.content, 'html.parser')
+        soup = BeautifulSoup(page_source, 'html.parser')
         discovered_splits = {}
         
         # Find all tables on the page
@@ -626,133 +579,203 @@ class EnhancedPFRScraper:
         
         return False
     
-    def get_qb_main_stats(self, season: int) -> Tuple[List[Player], List[QBBasicStats]]:
+    def get_qb_main_stats(self, season: int, player_names: Optional[List[str]] = None) -> Tuple[List[Player], List[QBBasicStats]]:
         """
-        Scrape main QB statistics for a given season
+        Scrape main QB statistics for a given season, with an option to filter for specific players.
         
         Args:
             season: Season year
+            player_names: Optional list of player names to filter for
             
         Returns:
-            List of QBStats objects
+            A tuple containing a list of Player objects and a list of QBBasicStats objects.
         """
         url = f"{self.base_url}/years/{season}/passing.htm"
         logger.info(f"Scraping QB main stats for {season} season")
         
-        response = self.make_request_with_retry(url)
-        if not response:
-            return []
+        # Set realistic referer to simulate coming from search engines or Reddit
+        realistic_referers = [
+            "https://www.google.com/",
+            "https://www.google.com/search?q=patrick+mahomes+stats+2024+pro+football+reference",
+            "https://www.google.com/search?q=nfl+quarterback+passing+stats+2024+pro+football+reference",
+            "https://duckduckgo.com/?q=pro+football+reference+nfl+stats+2024",
+            "https://www.reddit.com/r/nfl/comments/",
+            "https://www.reddit.com/r/fantasyfootball/comments/",
+            "https://www.reddit.com/r/nfl/comments/2024+quarterback+stats+pro+football+reference",
+            "https://www.bing.com/search?q=pro+football+reference+quarterback+stats+2024"
+        ]
+        # Selenium manager handles referer automatically
         
-        soup = BeautifulSoup(response.content, 'html.parser')
-        df = self.parse_simple_table(soup, 'passing')
+        page_source = self.make_request_with_retry(url)
+        if not page_source:
+            return [], []
         
-        if df is None:
-            logger.error(f"Failed to parse QB stats table for {season}")
-            return []
+        soup = BeautifulSoup(page_source, 'html.parser')
+        
+        player_rows = defaultdict(list)
+        
+        table = soup.find('table', {'id': 'passing'})
+        if not table or not table.find('tbody'):
+            logger.error(f"Could not find passing table or its body for {season}")
+            return [], []
+            
+        for i, row in enumerate(table.find('tbody').find_all('tr')):
+            logger.info(f"Processing row {i}")
+            if 'thead' in row.get('class', []):
+                logger.info(f"Row {i} is a header, skipping.")
+                continue
+
+            name_cell = row.find('td', {'data-stat': 'name_display'})
+            if not name_cell:
+                logger.warning(f"Row {i}: Could not find name cell with data-stat='name_display'.")
+                continue
+
+            player_name_anchor = name_cell.find('a')
+            if not player_name_anchor:
+                logger.warning(f"Row {i}: Could not find player name anchor tag.")
+                continue
+
+            player_name = clean_player_name(player_name_anchor.get_text(strip=True))
+            logger.info(f"Row {i}: Found player name: {player_name}")
+            
+            # Filter for specific players if requested
+            if player_names:
+                logger.info(f"Row {i}: Checking if '{player_name}' is in requested list: {player_names}")
+                if player_name.lower() not in [name.lower() for name in player_names]:
+                    logger.info(f"Row {i}: '{player_name}' not in list, skipping.")
+                    continue
+            
+            logger.info(f"Row {i}: Player '{player_name}' is in requested list, proceeding.")
+            
+            # Ensure the row is for a QB
+            pos_cell = row.find('td', {'data-stat': 'pos'})
+            if not pos_cell or pos_cell.get_text(strip=True).upper() != 'QB':
+                continue
+                
+            player_url = urljoin(self.base_url, player_name_anchor['href'])
+            pfr_id = extract_pfr_id(player_url)
+
+            if not pfr_id:
+                logger.warning(f"Could not extract PFR ID for {player_name}, skipping row.")
+                continue
+
+            team_cell = row.find('td', {'data-stat': 'team_name_abbr'})
+            team_code = normalize_pfr_team_code(team_cell.get_text(strip=True)) if team_cell else ''
+
+            is_total = team_code in {'2TM', '3TM', '4TM'}
+            
+            player_rows[pfr_id].append({
+                'row_data': row, 
+                'team_code': team_code, 
+                'is_total': is_total, 
+                'player_name': player_name, 
+                'player_url': player_url
+            })
         
         players_list = []
         basic_stats_list = []
         current_time = datetime.now()
         
-        for _, row in df.iterrows():
+        for pfr_id, rows in player_rows.items():
             try:
-                # Skip header rows and empty rows
-                player_value = str(row.get('Player', ''))
-                if player_value == 'Player' or not player_value:
+                if len(rows) > 1: # Multi-team player
+                    total_row_data = next((r for r in rows if r['is_total']), None)
+                    
+                    if not total_row_data:
+                        logger.warning(f"Multi-team player {rows[0]['player_name']} missing total row. Using last entry as stat source.")
+                        total_row_data = rows[-1]
+
+                    # Collect team codes from non-total rows
+                    teams = {r['team_code'] for r in rows if not r['is_total'] and r['team_code']}
+                    
+                    if not teams:
+                        logger.warning(f"Could not determine individual teams for multi-team player {total_row_data['player_name']}. Skipping this player.")
+                        continue # Skip this player if we can't figure out their teams
+
+                    team_str = ','.join(sorted(list(teams)))
+                    stat_source_row = total_row_data['row_data']
+                    player_name = total_row_data['player_name']
+                    player_url = total_row_data['player_url']
+                else: # Single-team player
+                    stat_source_row = rows[0]['row_data']
+                    team_str = rows[0]['team_code']
+                    player_name = rows[0]['player_name']
+                    player_url = rows[0]['player_url']
+                
+                if not team_str:
+                    logger.warning(f"Player {player_name} has no team associated. Skipping.")
                     continue
+
+                player = Player(pfr_id=pfr_id, player_name=player_name, pfr_url=player_url or '', created_at=current_time, updated_at=current_time)
                 
-                # Filter for QBs only - check position column
-                position = str(row.get('Pos', '')).strip().upper()
-                if position != 'QB':
-                    continue
-                
-                # Extract player name and generate PFR ID
-                player_name = clean_player_name(player_value)
-                if not player_name:
-                    continue
-                
-                # Try to find player URL to get PFR ID
-                player_url = self.find_player_url(player_name)
-                pfr_id = generate_player_id(player_name, player_url)
-                
-                # Create Player object first
-                player = Player(
-                    pfr_id=pfr_id,
-                    player_name=player_name,
-                    pfr_url=player_url or '',
-                    created_at=current_time,
-                    updated_at=current_time
-                )
-                
-                # Create QBBasicStats object (using actual PFR column names)
-                # Get yards value - handle duplicate 'Yds' columns
-                yds_value = row.get('Yds', '0')
-                if isinstance(yds_value, pd.Series):
-                    yds_value = yds_value.iloc[0] if len(yds_value) > 0 else '0'
-                
-                team_code = normalize_pfr_team_code(str(row.get('Team', '')))
-                basic_stats = QBBasicStats(
-                    pfr_id=pfr_id,
-                    player_name=player_name,
-                    player_url=player_url or '',
-                    season=season,
-                    rk=safe_int(str(row.get('Rk', '0'))),
-                    age=safe_int(str(row.get('Age', '0'))),
-                    team=team_code,
-                    pos=str(row.get('Pos', 'QB')),
-                    g=safe_int(str(row.get('G', '0'))),
-                    gs=safe_int(str(row.get('GS', '0'))),
-                    qb_rec=str(row.get('QBrec', '')),
-                    cmp=safe_int(str(row.get('Cmp', '0'))),
-                    att=safe_int(str(row.get('Att', '0'))),
-                    cmp_pct=safe_percentage(str(row.get('Cmp%', '0'))),
-                    yds=safe_int(str(yds_value)),
-                    td=safe_int(str(row.get('TD', '0'))),
-                    td_pct=safe_percentage(str(row.get('TD%', '0'))),
-                    int=safe_int(str(row.get('Int', '0'))),
-                    int_pct=safe_percentage(str(row.get('Int%', '0'))),
-                    first_downs=safe_int(str(row.get('1D', '0'))),
-                    succ_pct=safe_percentage(str(row.get('Succ%', '0'))),
-                    lng=safe_int(str(row.get('Lng', '0'))),
-                    y_a=safe_float(str(row.get('Y/A', '0'))),
-                    ay_a=safe_float(str(row.get('AY/A', '0'))),
-                    y_c=safe_float(str(row.get('Y/C', '0'))),
-                    y_g=safe_float(str(row.get('Y/G', '0'))),
-                    rate=safe_float(str(row.get('Rate', '0'))),
-                    qbr=safe_float(str(row.get('QBR', '') if row.get('QBR') is not None else '')),
-                    sk=safe_int(str(row.get('Sk', '0'))),
-                    sk_yds=safe_int(str(row.get('Yds.1', '0'))),
-                    sk_pct=safe_percentage(str(row.get('Sk%', '0'))),
-                    ny_a=safe_float(str(row.get('NY/A', '0'))),
-                    any_a=safe_float(str(row.get('ANY/A', '0'))),
-                    four_qc=safe_int(str(row.get('4QC', '0'))),
-                    gwd=safe_int(str(row.get('GWD', '0'))),
-                    awards=str(row.get('Awards', '')),
-                    player_additional=str(row.get('player_additional', '')),
-                    scraped_at=current_time,
-                    updated_at=current_time
-                )
-                
-                # Validate objects
-                player_errors = player.validate()
-                basic_errors = basic_stats.validate()
-                
-                all_errors = player_errors + basic_errors
-                if all_errors:
-                    for error in all_errors:
-                        self.metrics.add_warning(f"Validation error for {player_name}: {error}")
-                
-                # Store objects
+                stats = self._extract_stats_from_row(stat_source_row)
+                stats['team'] = team_str
+
+                basic_stats = QBBasicStats(pfr_id=pfr_id, player_name=player_name, player_url=player_url, season=season, **stats)
+                basic_stats.scraped_at = current_time
+                basic_stats.updated_at = current_time
+
                 players_list.append(player)
                 basic_stats_list.append(basic_stats)
                 
             except Exception as e:
-                self.metrics.add_error(f"Error processing QB stats row: {e}")
+                self.metrics.add_error(f"Error processing stats for PFR ID {pfr_id}: {e}")
                 continue
         
         logger.info(f"Successfully scraped {len(players_list)} QB players with basic stats for {season}")
         return players_list, basic_stats_list
     
+    def _extract_stats_from_row(self, row: Any) -> Dict[str, Any]:
+        """Helper to extract stats from a BeautifulSoup row tag into a dictionary."""
+        
+        def get_stat(stat_name):
+            cell = row.find('td', {'data-stat': stat_name})
+            return cell.get_text(strip=True) if cell else None
+
+        # Extract basic stats
+        cmp_val = safe_int(get_stat('pass_cmp'))
+        att_val = safe_int(get_stat('pass_att'))
+        
+        # Calculate incompletions (not directly available in main table)
+        inc_val = None
+        if cmp_val is not None and att_val is not None:
+            inc_val = att_val - cmp_val
+
+        return {
+            'rk': safe_int(get_stat('rank')),
+            'age': safe_int(get_stat('age')),
+            'pos': get_stat('pos') or 'QB',
+            'g': safe_int(get_stat('g')),
+            'gs': safe_int(get_stat('gs')),
+            'qb_rec': get_stat('qb_rec'),
+            'cmp': cmp_val,
+            'att': att_val,
+            'inc': inc_val,  # Calculated field
+            'cmp_pct': safe_percentage(get_stat('pass_cmp_pct')),
+            'yds': safe_int(get_stat('pass_yds')),
+            'td': safe_int(get_stat('pass_td')),
+            'td_pct': safe_percentage(get_stat('pass_td_pct')),
+            'int': safe_int(get_stat('pass_int')),
+            'int_pct': safe_percentage(get_stat('pass_int_pct')),
+            'first_downs': safe_int(get_stat('pass_first_down')),
+            'succ_pct': safe_percentage(get_stat('pass_succ_pct')),
+            'lng': safe_int(get_stat('pass_long')),
+            'y_a': safe_float(get_stat('pass_yds_per_att')),
+            'ay_a': safe_float(get_stat('pass_adj_yds_per_att')),
+            'y_c': safe_float(get_stat('pass_yds_per_cmp')),
+            'y_g': safe_float(get_stat('pass_yds_per_g')),
+            'rate': safe_float(get_stat('pass_rating')),
+            'qbr': safe_float(get_stat('qbr')),
+            'sk': safe_int(get_stat('pass_sacked')),
+            'sk_yds': safe_int(get_stat('pass_sacked_yds')),
+            'sk_pct': safe_percentage(get_stat('pass_sacked_pct')),
+            'ny_a': safe_float(get_stat('pass_net_yds_per_att')),
+            'any_a': safe_float(get_stat('pass_adj_net_yds_per_att')),
+            'four_qc': safe_int(get_stat('pass_4qc')),
+            'gwd': safe_int(get_stat('pass_gwd')),
+            'awards': get_stat('awards')
+        }
+
     def find_player_url(self, player_name: str) -> Optional[str]:
         """
         Find player's PFR URL by searching
@@ -781,114 +804,381 @@ class EnhancedPFRScraper:
         
         return f"{self.base_url}/players/{first_letter}/{player_code}.htm"
     
-    def scrape_player_splits(self, player_url: str, pfr_id: str, player_name: str, 
-                           team: str, season: int, scraped_at: datetime) -> List[QBSplitStats]:
+    def scrape_all_qb_data(self, season: int, use_concurrent_splits: bool = False) -> Tuple[List[QBBasicStats], List[QBSplitsType1], List[QBSplitsType2]]:
         """
-        Scrape all splits for a specific player
+        Scrape all QB data including passing stats and splits
+        
+        Args:
+            season: Season year
+            use_concurrent_splits: Whether to use concurrent processing for splits
+            
+        Returns:
+            Tuple of (passing_stats, basic_splits, advanced_splits)
         """
-        splits = []
-        response = self.make_request_with_retry(player_url)
-        if not response:
-            return splits
-        soup = BeautifulSoup(response.content, 'html.parser')
-        if '/splits/' in player_url:
-            discovered_splits = self.discover_splits_from_page(soup)
-        else:
-            discovered_splits = self.discover_all_splits(player_url)
-        for split_type, cat_to_col in discovered_splits.items():
-            for category, split_value_col in cat_to_col.items():
-                try:
-                    table_id = self.find_table_id_for_split(soup, split_type, category)
-                    if not table_id:
-                        continue
-                    df = self.parse_table_data(soup, table_id)
-                    if df is not None:
-                        split_stats = self.process_splits_table(
-                            df, pfr_id, player_name, team, season, 
-                            split_type, category, scraped_at, split_value_col
-                        )
-                        splits.extend(split_stats)
-                except Exception as e:
-                    self.metrics.add_error(f"Error processing split {split_type}/{category} for {player_name}: {e}")
-                    continue
-        return splits
+        logger.info(f"Starting comprehensive QB data scraping for {season} season")
+        
+        # Scrape basic passing stats
+        players, passing_stats = self.get_qb_main_stats(season)
+        if not passing_stats:
+            logger.error("Failed to scrape basic passing stats")
+            return [], [], []
+        
+        logger.info(f"Successfully scraped {len(passing_stats)} QB passing stats")
+        
+        # Use the dedicated SplitsManager for comprehensive splits extraction
+        basic_splits, advanced_splits = self.splits_manager.extract_all_player_splits(
+            passing_stats, use_concurrent=use_concurrent_splits
+        )
+        
+        # Log comprehensive results
+        logger.info(f"Comprehensive QB data scraping completed:")
+        logger.info(f"  - Passing stats: {len(passing_stats)}")
+        logger.info(f"  - Basic splits: {len(basic_splits)}")
+        logger.info(f"  - Advanced splits: {len(advanced_splits)}")
+        
+        # Log splits manager summary
+        self.splits_manager.log_extraction_summary()
+        
+        return passing_stats, basic_splits, advanced_splits
+    
+    def scrape_player_splits(self, player_url: str, pfr_id: str, player_name: str,
+                             team: str, season: int, scraped_at: datetime) -> Tuple[List[QBSplitStats], List[QBSplitsType2]]:
+        """Scrape all basic **and** advanced splits for a specific player.
+
+        Returns a tuple ``(basic_splits, advanced_splits)`` so the caller can
+        insert each set into its respective table.
+        """
+        # Use the dedicated SplitsManager for individual player splits
+        result = self.splits_manager.extract_player_splits_by_name(player_name, pfr_id, season)
+        
+        # Convert to legacy format for backwards compatibility
+        basic_splits = []
+        for split in result.basic_splits:
+            # Convert QBSplitsType1 to legacy format
+            basic_splits.append(type('obj', (object,), {
+                'pfr_id': split.pfr_id,
+                'player_name': split.player_name,
+                'season': split.season,
+                'split': split.split,
+                'value': split.value,
+                'g': split.g,
+                'w': split.w,
+                'l': split.l,
+                't': split.t,
+                'cmp': split.cmp,
+                'att': split.att,
+                'inc': split.inc,
+                'cmp_pct': split.cmp_pct,
+                'yds': split.yds,
+                'td': split.td,
+                'int': split.int,
+                'rate': split.rate,
+                'sk': split.sk,
+                'sk_yds': split.sk_yds,
+                'y_a': split.y_a,
+                'ay_a': split.ay_a,
+                'a_g': split.a_g,
+                'y_g': split.y_g,
+                'rush_att': split.rush_att,
+                'rush_yds': split.rush_yds,
+                'rush_y_a': split.rush_y_a,
+                'rush_td': split.rush_td,
+                'rush_a_g': split.rush_a_g,
+                'rush_y_g': split.rush_y_g,
+                'total_td': split.total_td,
+                'pts': split.pts,
+                'fmb': split.fmb,
+                'fl': split.fl,
+                'ff': split.ff,
+                'fr': split.fr,
+                'fr_yds': split.fr_yds,
+                'fr_td': split.fr_td,
+                'scraped_at': split.scraped_at
+            })())
+        
+        return basic_splits, result.advanced_splits
+
+    # ------------------------------------------------------------------
+    # Advanced-splits helpers
+    # ------------------------------------------------------------------
+
+    def _extract_split_info(self, row) -> Optional[Dict[str, str]]:
+        """Extract ``split`` and ``value`` labels from a row (helper copied from RawDataScraper)."""
+        split_id_cell = row.find('td', {'data-stat': 'split_id'})
+        split_value_cell = row.find('td', {'data-stat': 'split_value'})
+
+        if split_id_cell and split_value_cell:
+            return {
+                'split': split_id_cell.get_text(strip=True),
+                'value': split_value_cell.get_text(strip=True),
+            }
+
+        # Fallback – use first two <td> cells
+        cells = row.find_all('td')
+        if len(cells) >= 2:
+            return {
+                'split': cells[0].get_text(strip=True),
+                'value': cells[1].get_text(strip=True),
+            }
+
+        return None
+
+    def _extract_advanced_stats_from_row(self, row) -> Dict[str, Any]:
+        """Extract stats for ``QBSplitsType2`` from an <tr> element.
+
+        Mirrors the mapping logic from ``RawDataScraper`` so we maintain a
+        single source of truth for CSV-to-DB column names.
+        """
+        stat_mapping = {
+            'pass_cmp': 'cmp',
+            'pass_att': 'att',
+            'pass_inc': 'inc',
+            'pass_cmp_pct': 'cmp_pct',
+            'pass_yds': 'yds',
+            'pass_td': 'td',
+            'pass_first_down': 'first_downs',
+            'pass_int': 'int',
+            'pass_rating': 'rate',
+            'pass_sacked': 'sk',
+            'pass_sacked_yds': 'sk_yds',
+            'pass_yds_per_att': 'y_a',
+            'pass_adj_yds_per_att': 'ay_a',
+            'rush_att': 'rush_att',
+            'rush_yds': 'rush_yds',
+            'rush_yds_per_att': 'rush_y_a',
+            'rush_td': 'rush_td',
+            'rush_first_down': 'rush_first_downs',
+        }
+
+        stats: Dict[str, Any] = {}
+        for data_stat, csv_col in stat_mapping.items():
+            cell = row.find('td', {'data-stat': data_stat})
+            if cell is None:
+                continue
+            value = cell.get_text(strip=True)
+
+            if csv_col in {
+                'cmp',
+                'att',
+                'inc',
+                'yds',
+                'td',
+                'first_downs',
+                'int',
+                'sk',
+                'sk_yds',
+                'rush_att',
+                'rush_yds',
+                'rush_td',
+                'rush_first_downs',
+            }:
+                stats[csv_col] = safe_int(value) if value else None
+            elif csv_col in {'cmp_pct', 'rate', 'y_a', 'ay_a', 'rush_y_a'}:
+                stats[csv_col] = safe_float(value) if value else None
+            else:
+                stats[csv_col] = value if value else None
+
+        return stats
+
+    def _extract_advanced_splits(
+        self,
+        soup: BeautifulSoup,
+        pfr_id: str,
+        player_name: str,
+        season: int,
+        scraped_at: datetime,
+    ) -> List[QBSplitsType2]:
+        """Parse the ``advanced_splits`` table into ``QBSplitsType2`` objects."""
+
+        splits_adv: List[QBSplitsType2] = []
+        table = soup.find('table', {'id': 'advanced_splits'})
+        if not table:
+            logger.debug(f"Advanced splits table not found for {player_name}")
+            return splits_adv
+
+        tbody = table.find('tbody')
+        if not tbody:
+            return splits_adv
+
+        for row in tbody.find_all('tr'):
+            # Skip header rows
+            if 'thead' in row.get('class', []):
+                continue
+
+            split_info = self._extract_split_info(row)
+            if not split_info:
+                continue
+
+            stats_data = self._extract_advanced_stats_from_row(row)
+
+            split_obj = QBSplitsType2(
+                pfr_id=pfr_id,
+                player_name=player_name,
+                season=season,
+                split=split_info['split'],
+                value=split_info['value'],
+                scraped_at=scraped_at,
+                **stats_data,
+            )
+
+            splits_adv.append(split_obj)
+
+        logger.debug(f"Extracted {len(splits_adv)} advanced split rows for {player_name}")
+        return splits_adv
     
     def discover_splits_from_page(self, soup: BeautifulSoup) -> Dict[str, Dict[str, str]]:
         """
-        Discover splits from a splits page (not main player page) using section-based logic.
-        For each section, use the <tr><th>Section Name</th><td></td>...</tr> as the split type (section name),
-        and collect split values under that section.
-        Returns a dict mapping normalized split type to a dict of {category: original_section_name}.
+        Discover splits from a splits page by analyzing the actual PFR structure.
+        PFR splits pages have multiple tables, each containing different split categories.
+        We need to identify the split type based on the content and structure of each table.
         """
         discovered_splits = {}
         tables = soup.find_all('table')
         logger.debug(f"Found {len(tables)} tables on the page")
         
-        # Process all tables that look like splits tables
+        # Common split categories and their expected values
+        split_patterns = {
+            'place': ['Home', 'Away'],
+            'result': ['Win', 'Loss', 'Tie'],
+            'quarter': ['1st Quarter', '2nd Quarter', '3rd Quarter', '4th Quarter', 'Overtime'],
+            'score_differential': ['Leading', 'Tied', 'Trailing'],
+            'time': ['1st Half', '2nd Half'],
+            'opponent': ['vs. AFC', 'vs. NFC', 'vs. Division', 'vs. Conference'],
+            'game_situation': ['Close and Late', 'Late and Close'],
+            'down': ['1st Down', '2nd Down', '3rd Down', '4th Down'],
+            'yards_to_go': ['1-3 Yards', '4-6 Yards', '7-9 Yards', '10+ Yards'],
+            'field_position': ['Own 1-10', 'Own 11-20', 'Own 21-50', 'Opp 49-20', 'Opp 19-1', 'Red Zone'],
+            'snap_type': ['Huddle', 'No Huddle', 'Shotgun', 'Under Center'],
+            'play_action': ['Play Action', 'Non-Play Action'],
+            'run_pass_option': ['RPO', 'Non-RPO'],
+            'time_in_pocket': ['2.5+ Seconds', 'Under 2.5 Seconds']
+        }
+        
+        # Process each table
         for table_idx, table in enumerate(tables):
             tbody = table.find('tbody')
             if not tbody:
                 continue
                 
             rows = tbody.find_all('tr')
-            logger.debug(f"Table {table_idx}: {len(rows)} rows")
-            
-            # Only process tables with substantial data (likely splits tables)
-            if len(rows) < 5:
+            if len(rows) < 3:  # Skip tables with too few rows
                 continue
                 
-            logger.debug(f"Processing table {table_idx} as potential splits table with {len(rows)} rows")
+            logger.debug(f"Analyzing table {table_idx} with {len(rows)} rows")
             
-            current_split_type = None
-            current_split_type_orig = None
-            current_categories = []
-            
-            for row_idx, row in enumerate(rows):
-                ths = row.find_all('th')
-                tds = row.find_all('td')
-                
-                # Section header row: <tr><th>Section Name</th><td></td>...</tr>
-                if len(ths) == 1 and len(tds) > 20 and ths[0].get_text(strip=True):
-                    # Save previous section
-                    if current_split_type and current_categories:
-                        if current_split_type not in discovered_splits:
-                            discovered_splits[current_split_type] = {}
-                        discovered_splits[current_split_type].update({
-                            cat: current_split_type_orig for cat in current_categories
-                        })
-                        logger.debug(f"Table {table_idx}: Discovered split type '{current_split_type}' with {len(current_categories)} categories")
+            # Extract all potential split values from the first column
+            split_values = []
+            for row in rows:
+                # Skip header rows
+                if row.get('class') and 'thead' in row.get('class'):
+                    continue
                     
-                    current_split_type_orig = ths[0].get_text(strip=True)
-                    current_split_type = self._normalize_split_type(current_split_type_orig)
-                    current_categories = []
-                    logger.debug(f"Table {table_idx}, Row {row_idx}: New section header found, split_type='{current_split_type}' (orig='{current_split_type_orig}')")
-                    continue
-                
-                # Skip thead rows (column headers)
-                row_classes = row.get('class', [])
-                if isinstance(row_classes, list) and 'thead' in row_classes:
-                    continue
-                
-                # Data row - look for split values in the first column
                 first_cell = row.find('td')
                 if first_cell:
-                    split_value = first_cell.get_text(strip=True)
-                    if split_value and current_split_type and split_value not in current_categories:
-                        current_categories.append(split_value)
-                        logger.debug(f"Table {table_idx}, Row {row_idx}: Added category '{split_value}' to '{current_split_type}'")
+                    value = first_cell.get_text(strip=True)
+                    if value and value not in split_values:
+                        split_values.append(value)
             
-            # Save the last section from this table
-            if current_split_type and current_categories:
-                if current_split_type not in discovered_splits:
-                    discovered_splits[current_split_type] = {}
-                discovered_splits[current_split_type].update({
-                    cat: current_split_type_orig for cat in current_categories
-                })
-                logger.debug(f"Table {table_idx}: Final split type '{current_split_type}' with {len(current_categories)} categories")
+            logger.debug(f"Table {table_idx} split values: {split_values}")
+            
+            # Try to identify the split type based on the values found
+            identified_split_type = None
+            best_match_score = 0
+            
+            for split_type, expected_values in split_patterns.items():
+                # Calculate how many expected values match what we found
+                matches = sum(1 for expected in expected_values 
+                            for found in split_values 
+                            if expected.lower() in found.lower() or found.lower() in expected.lower())
+                
+                if matches > 0:
+                    match_score = matches / len(expected_values)
+                    if match_score > best_match_score:
+                        best_match_score = match_score
+                        identified_split_type = split_type
+            
+            # If we found a good match, add it to discovered splits
+            if identified_split_type and best_match_score >= 0.3:  # At least 30% match
+                if identified_split_type not in discovered_splits:
+                    discovered_splits[identified_split_type] = {}
+                
+                # Add all found values as categories
+                for value in split_values:
+                    if value:  # Skip empty values
+                        discovered_splits[identified_split_type][value] = identified_split_type
+                
+                logger.debug(f"Table {table_idx}: Identified as '{identified_split_type}' with {len(split_values)} categories (match score: {best_match_score:.2f})")
+            else:
+                # If we can't identify the split type, use a generic approach
+                # Look for common patterns in the values
+                if split_values:
+                    # Try to infer split type from the values themselves
+                    inferred_type = self._infer_split_type_from_values(split_values)
+                    if inferred_type:
+                        if inferred_type not in discovered_splits:
+                            discovered_splits[inferred_type] = {}
+                        for value in split_values:
+                            if value:
+                                discovered_splits[inferred_type][value] = inferred_type
+                        logger.debug(f"Table {table_idx}: Inferred type '{inferred_type}' with {len(split_values)} categories")
+                    else:
+                        # Fallback: use "other" but with the actual values
+                        if 'other' not in discovered_splits:
+                            discovered_splits['other'] = {}
+                        for value in split_values:
+                            if value:
+                                discovered_splits['other'][value] = 'other'
+                        logger.debug(f"Table {table_idx}: Using 'other' type with {len(split_values)} categories")
         
         total_categories = sum(len(cats) for cats in discovered_splits.values())
-        logger.info(f"Discovered {len(discovered_splits)} split types with {total_categories} total categories across all tables")
+        logger.info(f"Discovered {len(discovered_splits)} split types with {total_categories} total categories")
         return discovered_splits
+    
+    def _infer_split_type_from_values(self, values: List[str]) -> Optional[str]:
+        """
+        Infer split type from the actual values found in the table
+        
+        Args:
+            values: List of split values found in the table
+            
+        Returns:
+            Inferred split type or None if can't determine
+        """
+        if not values:
+            return None
+        
+        # Convert to lowercase for comparison
+        values_lower = [v.lower() for v in values]
+        
+        # Check for common patterns - order matters for priority
+        if any('quarter' in v for v in values_lower):
+            return 'quarter'
+        elif any('half' in v for v in values_lower):
+            return 'time'
+        elif any('leading' in v or 'trailing' in v or 'tied' in v for v in values_lower):
+            return 'score_differential'
+        elif any('home' in v or 'away' in v for v in values_lower):
+            return 'place'
+        elif any('win' in v or 'loss' in v for v in values_lower):
+            return 'result'
+        elif any('down' in v for v in values_lower):
+            return 'down'
+        elif any('yard' in v for v in values_lower):
+            return 'yards_to_go'
+        elif any('zone' in v for v in values_lower):
+            return 'field_position'
+        elif any(('own ' in v or 'opp ') and ('1-' in v or '2-' in v or '3-' in v or '4-' in v or '5-' in v or '6-' in v or '7-' in v or '8-' in v or '9-' in v) for v in values_lower):
+            return 'field_position'
+        elif any('huddle' in v or 'shotgun' in v for v in values_lower):
+            return 'snap_type'
+        elif any('action' in v for v in values_lower):
+            return 'play_action'
+        elif any('rpo' in v for v in values_lower):
+            return 'run_pass_option'
+        elif any('second' in v or 'pocket' in v for v in values_lower):
+            return 'time_in_pocket'
+        
+        return None
     
     def _normalize_split_type(self, split_type: str) -> str:
         """
@@ -1140,7 +1430,11 @@ class EnhancedPFRScraper:
         
         return splits
     
-    def process_players_concurrently(self, qb_stats: List[QBBasicStats], max_workers: int = None) -> List[QBSplitStats]:
+    def process_players_concurrently(
+        self,
+        qb_stats: List[QBBasicStats],
+        max_workers: int = None,
+    ) -> Tuple[List[QBSplitStats], List[QBSplitsType2]]:
         """
         Process multiple players concurrently while respecting rate limits
         
@@ -1152,7 +1446,8 @@ class EnhancedPFRScraper:
             List of QBSplitStats objects
         """
         max_workers = max_workers or config.scraping.max_workers
-        all_splits = []
+        all_basic: List[QBSplitStats] = []
+        all_adv: List[QBSplitsType2] = []
         current_time = datetime.now()
         
         logger.info(f"Processing {len(qb_stats)} players with {max_workers} workers")
@@ -1178,23 +1473,39 @@ class EnhancedPFRScraper:
             for future in as_completed(future_to_player):
                 player_name = future_to_player[future]
                 try:
-                    player_splits = future.result()
-                    all_splits.extend(player_splits)
-                    logger.info(f"Completed splits for {player_name}: {len(player_splits)} records")
+                    basic, adv = future.result()
+                    all_basic.extend(basic)
+                    all_adv.extend(adv)
+                    logger.info(
+                        f"Completed splits for {player_name}: basic={len(basic)}, adv={len(adv)}"
+                    )
                 except Exception as e:
                     self.metrics.add_error(f"Error processing {player_name}: {e}")
         
-        logger.info(f"Successfully scraped {len(all_splits)} total split records")
-        return all_splits
+        logger.info(
+            f"Successfully scraped {len(all_basic)} basic and {len(all_adv)} advanced split records"
+        )
+        return all_basic, all_adv
     
     def get_scraping_metrics(self) -> ScrapingMetrics:
         """Get current scraping metrics"""
+        # Get metrics from Selenium manager and merge with our own
+        if self.selenium_manager:
+            selenium_metrics = self.selenium_manager.get_metrics()
+            
+            # Update our metrics with Selenium manager data
+            self.metrics.total_requests = selenium_metrics.total_requests
+            self.metrics.successful_requests = selenium_metrics.successful_requests
+            self.metrics.failed_requests = selenium_metrics.failed_requests
+            self.metrics.rate_limit_violations = selenium_metrics.blocked_requests
+        
         return self.metrics
     
     def reset_metrics(self):
         """Reset scraping metrics"""
-        self.metrics = ScrapingMetrics()
-        self.metrics.start_time = datetime.now()
+        self.metrics = ScrapingMetrics(start_time=datetime.now())
+        if self.selenium_manager:
+            self.selenium_manager.reset_metrics()
     
     def create_scraping_log(self, season: int) -> ScrapingLog:
         """
@@ -1217,8 +1528,10 @@ class EnhancedPFRScraper:
             total_requests=self.metrics.total_requests,
             successful_requests=self.metrics.successful_requests,
             failed_requests=self.metrics.failed_requests,
-            total_qb_stats=0,  # Will be set by caller
-            total_qb_splits=0,  # Will be set by caller
+            total_players=0,  # Will be set by caller
+            total_passing_stats=0,  # Will be set by caller
+            total_splits=0,  # Will be set by caller
+            total_splits_advanced=0, # Will be set by caller
             errors=self.metrics.errors,
             warnings=self.metrics.warnings,
             rate_limit_violations=self.metrics.rate_limit_violations,
@@ -1235,9 +1548,22 @@ class EnhancedPFRScraper:
         Returns:
             Dictionary mapping split types to their categories
         """
-        response = self.make_request_with_retry(url)
-        if not response:
+        page_source = self.make_request_with_retry(url)
+        if not page_source:
             return {}
         
-        soup = BeautifulSoup(response.content, 'html.parser')
-        return self.discover_splits_from_page(soup) 
+        soup = BeautifulSoup(page_source, 'html.parser')
+        return self.discover_splits_from_page(soup)
+    
+    def close(self):
+        """Close the scraper and cleanup resources"""
+        if self.selenium_manager:
+            self.selenium_manager.end_session()
+    
+    def __enter__(self):
+        """Context manager entry"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit"""
+        self.close() 

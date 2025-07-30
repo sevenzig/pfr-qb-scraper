@@ -1,27 +1,24 @@
 #!/usr/bin/env python3
 """
-Main NFL QB Data Scraping System
-Orchestrates the entire scraping process with comprehensive error handling and monitoring
+NFL QB Data Pipeline
+Main pipeline for scraping NFL quarterback data from Pro Football Reference
 """
 
-import sys
-import os
 import logging
-import argparse
-from datetime import datetime
-from typing import List, Dict, Any, Optional
+import os
 import time
+from datetime import datetime
+from typing import List, Optional, Dict, Any, Tuple
+from dataclasses import dataclass
 
-# Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
-from .enhanced_scraper import EnhancedPFRScraper
-from database.db_manager import DatabaseManager
-from models.qb_models import QBBasicStats, QBAdvancedStats, QBSplitStats, Player, Team, ScrapingLog
-from utils.data_utils import (
-    generate_session_id, calculate_processing_time
+from src.scrapers.selenium_enhanced_scraper import SeleniumEnhancedPFRScraper
+from src.database.db_manager import DatabaseManager
+from src.models.qb_models import QBBasicStats, QBAdvancedStats, QBSplitStats, Player, Team, ScrapingLog
+from src.utils.data_utils import (
+    safe_int, safe_float, safe_percentage, clean_player_name,
+    generate_player_id, extract_pfr_id, generate_session_id, calculate_processing_time
 )
-from config.config import config
+from src.config.config import config
 
 # Configure logging
 def setup_logging():
@@ -46,12 +43,29 @@ logger = logging.getLogger(__name__)
 class NFLQBDataPipeline:
     """Main pipeline orchestrating the entire scraping and database process"""
     
-    def __init__(self, connection_string: Optional[str] = None, rate_limit_delay: Optional[float] = None):
+    def __init__(self, connection_string: Optional[str] = None, min_delay: float = 7.0, max_delay: float = 12.0):
         self.db_manager = DatabaseManager(connection_string or config.get_database_url())
-        self.scraper = EnhancedPFRScraper(rate_limit_delay or config.get_rate_limit_delay())
+        self.min_delay = min_delay
+        self.max_delay = max_delay
         self.session_id = generate_session_id()
         
         logger.info(f"Initialized NFL QB Data Pipeline (Session: {self.session_id})")
+
+    # ------------------------------------------------------------------
+    # Compatibility helpers
+    # ------------------------------------------------------------------
+
+    def reset_metrics(self):
+        """Expose underlying scraper.reset_metrics for external callers."""
+        # Create a temporary scraper to reset metrics
+        with SeleniumEnhancedPFRScraper(min_delay=self.min_delay, max_delay=self.max_delay) as scraper:
+            scraper.reset_metrics()
+
+    def get_metrics(self):
+        """Expose underlying scraper.get_scraping_metrics for metrics reporting."""
+        # Create a temporary scraper to get metrics
+        with SeleniumEnhancedPFRScraper(min_delay=self.min_delay, max_delay=self.max_delay) as scraper:
+            return scraper.get_scraping_metrics()
     
     def run_pipeline(self, season: int, splits_only: bool = False, 
                     specific_players: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -95,20 +109,23 @@ class NFLQBDataPipeline:
             self.db_manager.create_tables()
             
             qb_stats = []
-            qb_splits = []
+            qb_splits: List[Any] = []
+            advanced_splits: List[Any] = []
             
             if not splits_only:
-                # Scrape main QB statistics
-                logger.info("Scraping main QB statistics...")
-                qb_stats = self.scraper.get_qb_main_stats(season)
+                # Scrape main QB statistics using Selenium
+                logger.info("Scraping main QB statistics using Selenium...")
                 
-                if qb_stats:
-                    # Insert main stats into database
-                    inserted_count = self.db_manager.insert_qb_stats(qb_stats)
+                with SeleniumEnhancedPFRScraper(min_delay=self.min_delay, max_delay=self.max_delay) as scraper:
+                    players, qb_stats = scraper.get_qb_main_stats(season)
+                    
+                    # Insert players first to satisfy foreign key constraints
+                    self.db_manager.insert_players(players)
+                    
+                    # Insert into database
+                    inserted_count = self.db_manager.insert_qb_basic_stats(qb_stats)
                     results['qb_stats_count'] = inserted_count
-                    logger.info(f"Inserted {inserted_count} QB stats records")
-                else:
-                    logger.warning(f"No QB stats found for {season} season")
+                    logger.info(f"Inserted {inserted_count} QB records into database")
             
             # Scrape splits data
             if qb_stats or specific_players:
@@ -124,24 +141,30 @@ class NFLQBDataPipeline:
                 else:
                     filtered_stats = qb_stats
                 
-                # Scrape splits with concurrent processing
-                qb_splits = self.scraper.process_players_concurrently(
-                    filtered_stats, 
-                    max_workers=config.scraping.max_workers
+                # Scrape splits with concurrent processing (basic & advanced)
+                basic_splits, advanced_splits = self.scraper.process_players_concurrently(
+                    filtered_stats,
+                    max_workers=config.scraping.max_workers,
                 )
-                
-                if qb_splits:
-                    # Insert splits into database
-                    inserted_count = self.db_manager.insert_qb_splits(qb_splits)
-                    results['qb_splits_count'] = inserted_count
-                    logger.info(f"Inserted {inserted_count} QB splits records")
+
+                # Insert into respective tables
+                if basic_splits:
+                    inserted_basic = self.db_manager.insert_qb_splits(basic_splits)
+                    results['qb_splits_count'] = inserted_basic
+                    logger.info("Inserted %s basic QB splits", inserted_basic)
                 else:
-                    logger.warning("No QB splits found")
+                    logger.warning("No basic QB splits found")
+
+                if advanced_splits:
+                    self.db_manager.insert_qb_splits_advanced(advanced_splits)
+                else:
+                    logger.warning("No advanced QB splits found")
             
             # Create scraping log
             scraping_log = self.scraper.create_scraping_log(season)
             scraping_log.total_qb_stats = results['qb_stats_count']
             scraping_log.total_qb_splits = results['qb_splits_count']
+            scraping_log.total_splits_advanced = len(advanced_splits)
             
             # Insert scraping log
             self.db_manager.insert_scraping_log(scraping_log)
@@ -232,6 +255,126 @@ class NFLQBDataPipeline:
         logger.info("Performing health check...")
         return self.db_manager.health_check()
 
+    def scrape_season_qbs(self, season: int, player_names: Optional[List[str]] = None):
+        """
+        Scrape QB data for a specific season, with an option to filter for specific players.
+        
+        Args:
+            season: Season year to scrape
+            player_names: Optional list of player names to filter for
+        
+        Returns:
+            Dictionary with scraping results
+        """
+        # Scrape all main QB statistics first
+        logger.info("Scraping all main QB statistics...")
+        
+        with SeleniumEnhancedPFRScraper(min_delay=self.min_delay, max_delay=self.max_delay) as scraper:
+            players_to_process, stats_to_process = scraper.get_qb_main_stats(season, player_names=player_names)
+
+            if not stats_to_process:
+                logger.warning(f"No QB stats found for specified players: {player_names}")
+                return {"success": False, "message": "No data found for specified players."}
+            
+            # Insert players first to satisfy foreign key constraints
+            self.db_manager.insert_players(players_to_process)
+            
+            # Insert into database
+            inserted_count = self.db_manager.insert_qb_basic_stats(stats_to_process)
+            logger.info(f"Inserted {inserted_count} QB records into database")
+            
+            # Scrape splits data
+            logger.info("Scraping QB splits data...")
+            
+            basic_splits, advanced_splits = scraper.process_players_concurrently(
+                stats_to_process,
+                max_workers=config.scraping.max_workers,
+            )
+
+            if basic_splits:
+                inserted_basic = self.db_manager.insert_qb_splits(basic_splits)
+                logger.info("Inserted %s basic QB split records", inserted_basic)
+            else:
+                logger.warning("No basic QB splits found")
+
+            if advanced_splits:
+                inserted_adv = self.db_manager.insert_qb_splits_advanced(advanced_splits)
+                logger.info("Inserted %s advanced QB split records", inserted_adv)
+            else:
+                logger.warning("No advanced QB splits found")
+            
+            # Log results
+            log = scraper.create_scraping_log(season)
+            log.total_players = len(players_to_process)
+            log.total_passing_stats = len(stats_to_process)
+            log.total_splits = len(basic_splits)
+            log.total_splits_advanced = len(advanced_splits)
+            self.db_manager.insert_scraping_log(log)
+        
+        return {
+            "success": True,
+            "season": season,
+            "qb_stats_count": len(stats_to_process),
+            "qb_splits_count": len(basic_splits),
+            "qb_splits_advanced_count": len(advanced_splits),
+            "log_session_id": log.session_id
+        }
+    
+    def scrape_team_qbs(self, team_code: str, season: int):
+        """
+        Scrape QB data for a specific team in a specific season
+        
+        Args:
+            team_code: Team code (e.g., 'BUF', 'KAN', 'LAR')
+            season: Season year to scrape
+        
+        Returns:
+            Dictionary with scraping results
+        """
+        # Scrape main QB statistics
+        logger.info(f"Scraping main QB statistics for {team_code} in {season} season...")
+        
+        with SeleniumEnhancedPFRScraper(min_delay=self.min_delay, max_delay=self.max_delay) as scraper:
+            players, qb_stats = scraper.get_qb_main_stats(season, team_code)
+            
+            # Insert players first to satisfy foreign key constraints
+            self.db_manager.insert_players(players)
+            
+            # Insert into database
+            inserted_count = self.db_manager.insert_qb_basic_stats(qb_stats)
+            logger.info(f"Inserted {inserted_count} QB records into database")
+            
+            # Scrape splits data using Selenium
+            logger.info("Scraping QB splits data using Selenium...")
+            
+            basic_splits, advanced_splits = scraper.process_players_concurrently(
+                qb_stats,
+                max_workers=config.scraping.max_workers,
+            )
+
+            if basic_splits:
+                self.db_manager.insert_qb_splits(basic_splits)
+            if advanced_splits:
+                self.db_manager.insert_qb_splits_advanced(advanced_splits)
+            
+            # Log results
+            log = scraper.create_scraping_log(season)
+            log.total_players = len(players)
+            log.total_passing_stats = len(qb_stats)
+            log.total_splits = len(basic_splits)
+            log.total_splits_advanced = len(advanced_splits)
+            self.db_manager.insert_scraping_log(log)
+        
+        return {
+            "success": True,
+            "season": season,
+            "team_code": team_code,
+            "qb_stats_count": len(qb_stats),
+            "qb_splits_count": len(basic_splits),
+            "qb_splits_advanced_count": len(advanced_splits),
+            "log_session_id": log.session_id
+        }
+
 def main():
     """Main execution function"""
     # Setup logging
@@ -241,8 +384,10 @@ def main():
     parser = argparse.ArgumentParser(description='NFL QB Data Scraping System')
     parser.add_argument('--season', type=int, default=config.app.target_season,
                        help='Season year to scrape (default: 2024)')
-    parser.add_argument('--rate-limit', type=float, default=config.scraping.rate_limit_delay,
-                       help='Rate limit delay in seconds (default: 3.0)')
+    parser.add_argument('--min-delay', type=float, default=7.0,
+                       help='Minimum delay between requests in seconds (default: 7.0)')
+    parser.add_argument('--max-delay', type=float, default=12.0,
+                       help='Maximum delay between requests in seconds (default: 12.0)')
     parser.add_argument('--splits-only', action='store_true',
                        help='Only scrape splits data (skip main stats)')
     parser.add_argument('--players', nargs='+',
@@ -258,7 +403,7 @@ def main():
     
     try:
         # Initialize pipeline
-        pipeline = NFLQBDataPipeline(rate_limit_delay=args.rate_limit)
+        pipeline = NFLQBDataPipeline(min_delay=args.min_delay, max_delay=args.max_delay)
         
         # Handle different modes
         if args.health_check:

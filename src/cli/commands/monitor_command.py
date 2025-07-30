@@ -8,7 +8,7 @@ import sys
 from argparse import ArgumentParser, Namespace
 from typing import Dict, Any, List
 
-from ..base_command import BaseCommand
+from src.cli.base_command import BaseCommand
 
 
 class MonitorCommand(BaseCommand):

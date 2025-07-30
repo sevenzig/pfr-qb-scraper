@@ -1,13 +1,26 @@
-#!/usr/bin/env python3
 """
-Core package for NFL QB Data Scraping System
-Contains unified scraper and core business logic
+Core module for NFL QB data scraping.
+
+This module contains the core business logic for scraping, parsing, and processing
+NFL quarterback data from Pro Football Reference.
 """
 
-from .scraper import CoreScraper, RateLimiter, ScrapingMetrics
+from .scraper import CoreScraper
+from .request_manager import RequestManager
+from .html_parser import HTMLParser
+from .pfr_data_extractor import PFRDataExtractor, ExtractionResult
+from .pfr_structure_analyzer import PFRStructureAnalyzer, TableInfo, DataStatMapping
+from .selenium_manager import SeleniumManager, SeleniumConfig
 
 __all__ = [
     'CoreScraper',
-    'RateLimiter', 
-    'ScrapingMetrics'
+    'RequestManager', 
+    'HTMLParser',
+    'PFRDataExtractor',
+    'ExtractionResult',
+    'PFRStructureAnalyzer',
+    'TableInfo',
+    'DataStatMapping',
+    'SeleniumManager',
+    'SeleniumConfig'
 ] 

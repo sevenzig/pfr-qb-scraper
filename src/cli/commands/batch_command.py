@@ -10,14 +10,14 @@ import time
 from argparse import ArgumentParser, Namespace
 from typing import Dict, Any, List
 
-from ..base_command import BaseCommand
+from src.cli.base_command import BaseCommand
 
 # Use try/except for optional imports
 try:
     from ...operations.batch_manager import BatchOperationManager, BatchSession, BatchStatus
 except ImportError:
     try:
-        from operations.batch_manager import BatchOperationManager, BatchSession, BatchStatus
+        from src.operations.batch_manager import BatchOperationManager, BatchSession, BatchStatus
     except ImportError:
         BatchOperationManager = None
         BatchSession = None

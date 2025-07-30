@@ -17,13 +17,10 @@ import hashlib
 import sqlite3
 from contextlib import contextmanager
 
-# Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
 try:
-    from database.db_manager import DatabaseManager
-    from models.qb_models import QBBasicStats, QBAdvancedStats, QBSplitStats, Player
-    from config.config import config
+    from src.database.db_manager import DatabaseManager
+    from src.models.qb_models import QBBasicStats, QBAdvancedStats, QBSplitStats, Player
+    from src.config.config import config
 except ImportError:
     # Fallback for testing
     DatabaseManager = None

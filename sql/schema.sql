@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS qb_passing_stats (
     qb_rec VARCHAR(20),  -- QB Record (W-L-T format)
     cmp INTEGER,  -- Completions
     att INTEGER,  -- Attempts
+    inc INTEGER,  -- Incompletions (calculated: att - cmp)
     cmp_pct DECIMAL(5,2),  -- Completion %
     yds INTEGER,  -- Yards
     td INTEGER,  -- Touchdowns
@@ -111,39 +112,48 @@ CREATE TABLE IF NOT EXISTS qb_splits (
     split VARCHAR(50),  -- Split type (e.g., "League", "Place", "Result")
     value VARCHAR(100),  -- Split value (e.g., "NFL", "Home", "Win")
     
-    -- Raw CSV columns (matching advanced_stats_1.csv exactly)
-    g INTEGER,  -- Games
-    w INTEGER,  -- Wins
-    l INTEGER,  -- Losses
-    t INTEGER,  -- Ties
-    cmp INTEGER,  -- Completions
-    att INTEGER,  -- Attempts
-    inc INTEGER,  -- Incompletions
-    cmp_pct DECIMAL(5,2),  -- Completion %
-    yds INTEGER,  -- Passing Yards
-    td INTEGER,  -- Passing TDs
-    int INTEGER,  -- Interceptions
-    rate DECIMAL(5,2),  -- Passer Rating
-    sk INTEGER,  -- Sacks
-    sk_yds INTEGER,  -- Sack Yards
-    y_a DECIMAL(5,2),  -- Y/A (Yards per Attempt)
-    ay_a DECIMAL(5,2),  -- AY/A (Adjusted Yards per Attempt)
-    a_g DECIMAL(5,2),  -- A/G (Attempts per Game)
-    y_g DECIMAL(6,2),  -- Y/G (Yards per Game)
-    rush_att INTEGER,  -- Rush Attempts
-    rush_yds INTEGER,  -- Rush Yards
-    rush_y_a DECIMAL(5,2),  -- Rush Y/A
-    rush_td INTEGER,  -- Rush TDs
-    rush_a_g DECIMAL(5,2),  -- Rush A/G (Rush Attempts per Game)
-    rush_y_g DECIMAL(6,2),  -- Rush Y/G (Rush Yards per Game)
-    total_td INTEGER,  -- Total TDs
-    pts INTEGER,  -- Points
-    fmb INTEGER,  -- Fumbles
-    fl INTEGER,  -- Fumbles Lost
-    ff INTEGER,  -- Fumbles Forced
-    fr INTEGER,  -- Fumbles Recovered
-    fr_yds INTEGER,  -- Fumble Recovery Yards
-    fr_td INTEGER,  -- Fumble Recovery TDs
+    -- Raw CSV columns (matching advanced_stats_1.csv exactly by position)
+    -- Columns 3-6: Game Stats
+    g INTEGER,           -- Games (Col 3)
+    w INTEGER,           -- Wins (Col 4)
+    l INTEGER,           -- Losses (Col 5)
+    t INTEGER,           -- Ties (Col 6)
+    
+    -- Columns 7-20: Passing Stats
+    cmp INTEGER,         -- Completions (Col 7)
+    att INTEGER,         -- Passing Attempts (Col 8)
+    inc INTEGER,         -- Incompletions (Col 9)
+    cmp_pct DECIMAL(5,2), -- Completion % (Col 10)
+    yds INTEGER,         -- Passing Yards (Col 11)
+    td INTEGER,          -- Passing TDs (Col 12)
+    int INTEGER,         -- Interceptions (Col 13)
+    rate DECIMAL(5,2),   -- Passer Rating (Col 14)
+    sk INTEGER,          -- Sacks (Col 15)
+    sk_yds INTEGER,      -- Sack Yards (Col 16)
+    y_a DECIMAL(5,2),    -- Passing Y/A (Col 17)
+    ay_a DECIMAL(5,2),   -- AY/A (Col 18)
+    a_g DECIMAL(5,2),    -- Passing A/G (Col 19)
+    y_g DECIMAL(6,2),    -- Passing Y/G (Col 20)
+    
+    -- Columns 21-26: Rushing Stats
+    rush_att INTEGER,    -- Rush Attempts (Col 21)
+    rush_yds INTEGER,    -- Rush Yards (Col 22)
+    rush_y_a DECIMAL(5,2), -- Rush Y/A (Col 23)
+    rush_td INTEGER,     -- Rush TDs (Col 24)
+    rush_a_g DECIMAL(5,2), -- Rush A/G (Col 25)
+    rush_y_g DECIMAL(6,2), -- Rush Y/G (Col 26)
+    
+    -- Columns 27-28: Total Stats
+    total_td INTEGER,    -- Total TDs (Col 27)
+    pts INTEGER,         -- Points (Col 28)
+    
+    -- Columns 29-34: Fumble Stats
+    fmb INTEGER,         -- Fumbles (Col 29)
+    fl INTEGER,          -- Fumbles Lost (Col 30)
+    ff INTEGER,          -- Fumbles Forced (Col 31)
+    fr INTEGER,          -- Fumbles Recovered (Col 32)
+    fr_yds INTEGER,      -- Fumble Recovery Yards (Col 33)
+    fr_td INTEGER,       -- Fumble Recovery TDs (Col 34)
     
     -- Metadata
     scraped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -166,7 +176,7 @@ CREATE TABLE IF NOT EXISTS qb_splits_advanced (
     split VARCHAR(50),  -- Split type (e.g., "Down", "Yards To Go")
     value VARCHAR(100),  -- Split value (e.g., "1st", "1-3")
     
-    -- Raw CSV columns (matching advanced_stats.2.csv exactly)
+    -- Columns 3-15: Passing Stats
     cmp INTEGER,  -- Completions
     att INTEGER,  -- Attempts
     inc INTEGER,  -- Incompletions
@@ -180,6 +190,8 @@ CREATE TABLE IF NOT EXISTS qb_splits_advanced (
     sk_yds INTEGER,  -- Sack Yards
     y_a DECIMAL(5,2),  -- Y/A (Yards per Attempt)
     ay_a DECIMAL(5,2),  -- AY/A (Adjusted Yards per Attempt)
+
+    -- Columns 16-20: Rushing Stats
     rush_att INTEGER,  -- Rush Attempts
     rush_yds INTEGER,  -- Rush Yards
     rush_y_a DECIMAL(5,2),  -- Rush Y/A
